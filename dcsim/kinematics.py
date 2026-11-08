@@ -15,6 +15,23 @@ QUAT_DOWN_FINGERS_Y = np.array([0.0, 0.0, 1.0, 0.0])
 QUAT_DOWN_FINGERS_X = np.array([0.0, 0.70710678, 0.70710678, 0.0])
 
 
+def _quat_from_axes(z_hand, y_hand) -> np.ndarray:
+    z = np.asarray(z_hand, float) / np.linalg.norm(z_hand)
+    y = np.asarray(y_hand, float)
+    y = y - z * np.dot(y, z)
+    y /= np.linalg.norm(y)
+    q = np.zeros(4)
+    mujoco.mju_mat2Quat(q, np.column_stack([np.cross(y, z), y, z]).flatten())
+    return q
+
+
+# Gripper pointing at the rack, tilted 75 deg down, fingers closing along Y: used for the
+# tray's pull tab. (Pointing level at the rack is out of the Franka's reach at tray height.)
+FRONT_PITCH_DEG = 75.0  # steepest tilt that covers the whole 32 cm pull (60-65 run out of reach near the base)
+FRONT_APPROACH = np.array([np.cos(np.radians(FRONT_PITCH_DEG)), 0.0, -np.sin(np.radians(FRONT_PITCH_DEG))])
+QUAT_FRONT = _quat_from_axes(FRONT_APPROACH, [0, 1, 0])
+
+
 def quat_err(q_des: np.ndarray, q_cur: np.ndarray) -> np.ndarray:
     """Rotation vector taking q_cur to q_des (world frame)."""
     neg = np.zeros(4)

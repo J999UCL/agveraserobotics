@@ -26,6 +26,7 @@ from .health import PartHealth, ServerHealth
 from .kinematics import ARM_DOF, IK, QUAT_DOWN_FINGERS_Y, Q_NOMINAL
 
 GRIP_OPEN, GRIP_CLOSED = 255.0, 0.0
+MAX_JOINT_SPEED = 1.2  # rad/s cap on commanded joint motion (smooth, no jerks)
 SEAT_STIFFNESS = 2000.0  # N/m: a healthy part unseats ~6 mm into the lift (12 N)
 EQ_CONSTRAINT = int(mujoco.mjtConstraint.mjCNSTR_EQUALITY)
 
@@ -98,6 +99,7 @@ class DataCenterSim:
             self.grasp_site[cid] = m.site(f"{cid}_grasp").id
         self.mat = {n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MATERIAL, f"led_{n}")
                     for n in ("ok", "fault", "identify", "off", "rebuild")}
+        self.eq_handle = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, "grip_handle")
         self.tray_slots = [s for s, d in self.layout.slots.items() if d.where == "tray"]
         self.cart_slots = [s for s, d in self.layout.slots.items() if d.where == "cart"]
 
@@ -136,6 +138,8 @@ class DataCenterSim:
             self.health.log("critical" if "failed" in fault or "uncorrectable" in fault else "warning",
                             f"{slot}: {self.health.parts[pid].fault_note}", slot=slot, part=pid)
         self._held: str | None = None
+        self._on_handle = False
+        self.d.eq_active[self.eq_handle] = False
         self._grip_z0 = 0.0
         self._last_force = 0.0
         self._peak_force = 0.0
@@ -200,31 +204,58 @@ class DataCenterSim:
                 best = (q, err)
         return best[0], False
 
-    def move_tcp(self, pos, quat=QUAT_DOWN_FINGERS_Y, speed: float = 0.25, settle: float = 0.3) -> bool:
-        """Straight-line TCP move at `speed` m/s (blocking). Returns False if unreachable."""
+    def move_tcp(self, pos, quat=QUAT_DOWN_FINGERS_Y, speed: float = 0.25, settle: float = 0.3,
+                 guard: Callable[[], str | None] | None = None) -> bool:
+        """Smooth straight-line TCP move at `speed` m/s (blocking).
+
+        One continuous IK path: every waypoint is solved starting from the previous one, so
+        the arm never hops between postures, and joint speed is capped. `guard` is checked
+        every tick; if it returns a reason the arm holds still and this returns False
+        (the reason is in self.guard_reason). Returns False if the target is unreachable.
+        """
+        self.guard_reason = None
+        dt = self.cfg.control_dt
         p0, q0 = self.tcp_pose()
         pos, quat = np.asarray(pos, float), np.asarray(quat, float)
-        q_goal, ok = self.solve_ik(pos, quat)
+        q_goal, ok, _ = self.ik.solve(pos, quat, self.q_cmd, iters=400)  # same posture family first
         if not ok:
-            return False
-        n = max(1, int(np.linalg.norm(pos - p0) / (speed * self.cfg.control_dt)))
-        # also limit by rotation so big wrist turns are not instant
-        dq_max = np.abs(q_goal - self.q_cmd).max()
-        n = max(n, int(dq_max / (1.5 * self.cfg.control_dt)))
+            q_goal, ok = self.solve_ik(pos, quat)
+            if not ok:
+                return False
+        n = max(1, int(np.linalg.norm(pos - p0) / (speed * dt)))
+        n = max(n, int(np.abs(q_goal - self.q_cmd).max() / (MAX_JOINT_SPEED * 0.8 * dt)))
         q_prev = self.q_cmd.copy()
         for i in range(1, n + 1):
             a = i / n
-            qi = _slerp(q0, quat, a)
-            qj, okj, _ = self.ik.solve(p0 + (pos - p0) * a, qi, q_prev, iters=60)
+            a = a * a * (3 - 2 * a)  # ease in/out
+            qj, okj, _ = self.ik.solve(p0 + (pos - p0) * a, _slerp(q0, quat, a), q_prev, iters=100)
             if not okj:
                 qj = q_prev + (q_goal - q_prev) / max(1, n - i + 1)
-            self.q_cmd = qj
-            q_prev = qj
-            self._checked_step()
-        self.q_cmd = q_goal
-        for _ in range(int(settle / self.cfg.control_dt)):
-            self._checked_step()
+            if self._command_arm(qj, guard):
+                return False
+            q_prev = self.q_cmd.copy()
+        q_final, okf, _ = self.ik.solve(pos, quat, self.q_cmd, iters=400)
+        q_final = q_final if okf else q_goal
+        for _ in range(int(settle / dt) + 50):
+            if self._command_arm(q_final, guard):
+                return False
+            if np.abs(self.q_cmd - q_final).max() < 1e-4 and np.abs(self.d.qvel[:ARM_DOF]).max() < 0.02:
+                break
         return bool(np.linalg.norm(self.tcp_pose()[0] - pos) < 0.01)
+
+    def _command_arm(self, q_target, guard=None) -> bool:
+        """Move the commanded joints toward q_target (speed-capped) and step once.
+        Returns True if the guard tripped (arm then holds where it is)."""
+        lim = MAX_JOINT_SPEED * self.cfg.control_dt
+        self.q_cmd = self.q_cmd + np.clip(np.asarray(q_target) - self.q_cmd, -lim, lim)
+        self._checked_step()
+        if guard is not None:
+            reason = guard()
+            if reason:
+                self.guard_reason = reason
+                self.q_cmd = self.d.qpos[:ARM_DOF].copy()
+                return True
+        return False
 
     def move_joints(self, q, duration: float = 2.0) -> None:
         q0, q1 = self.q_cmd.copy(), np.asarray(q, float)[:ARM_DOF]
@@ -247,6 +278,8 @@ class DataCenterSim:
 
     def open_gripper(self) -> dict:
         self.grip_cmd = GRIP_OPEN
+        self.d.eq_active[self.eq_handle] = False
+        self._on_handle = False
         released = self._release()
         for _ in range(20):
             self.step()
@@ -256,8 +289,25 @@ class DataCenterSim:
         self.grip_cmd = GRIP_CLOSED
         for _ in range(25):
             self.step()
+        if self._try_handle():
+            return {"width": round(self.gripper_width(), 4), "holding": "tray_handle"}
         grabbed = self._try_grasp()
         return {"width": round(self.gripper_width(), 4), "holding": grabbed}
+
+    def _try_handle(self) -> bool:
+        """Closed on the tray's pull tab? Pin the fingertip point to the tray."""
+        tcp = self.d.site_xpos[self.tcp_site].copy()
+        if self.gripper_width() < 0.003 or np.linalg.norm(tcp - self.tray_handle_position()) > self.cfg.grasp_tol:
+            return False
+        ph, qh = self._body_pose(self.hand_body)
+        pt, qt = self._body_pose(self.tray_body)
+        data = self.m.eq_data[self.eq_handle]
+        data[0:3] = _rot(qh).T @ (tcp - ph)  # point on the hand (body1 frame)
+        data[3:6] = _rot(qt).T @ (tcp - pt)  # same point on the tray (body2 frame)
+        self.d.eq_active[self.eq_handle] = True
+        self._on_handle = True
+        self._log_event("gripped_tray_handle")
+        return True
 
     def holding(self) -> str | None:
         return self._held
@@ -271,8 +321,9 @@ class DataCenterSim:
         return "in rack" if e < 0.01 else ("service position" if e > self.cfg.tray.travel - 0.01 else f"out {e:.2f} m")
 
     def tray_handle_position(self) -> np.ndarray:
+        """Where the TCP goes to grip the pull tab (a little in front of its center)."""
         t = self.cfg.tray
-        return self.d.xpos[self.tray_body] + np.array([t.handle_x, 0, t.handle_z])
+        return self.d.xpos[self.tray_body] + np.array([t.handle_x - 0.006, 0, t.handle_z])
 
     # ================================================================ parts
     def installed(self) -> dict[str, str | None]:
@@ -325,12 +376,14 @@ class DataCenterSim:
     # --- welds -------------------------------------------------------------
     def _set_weld(self, eq_id: int, p1, q1, p2, q2, anchor_in_2=None) -> None:
         """Weld body1 (pose p1,q1) to body2 (p2,q2) at this relative pose.
-        MuJoCo convention (verified empirically): relpose = body2 expressed in body1's frame,
-        anchor left at zero."""
-        R1 = _rot(q1)
+
+        MuJoCo's weld pins a point on body1 (data[3:6], body1 frame) to a point on body2
+        (data[0:3] = anchor, body2 frame) and holds relative orientation data[6:10] (q1^-1 q2).
+        We pin body1's own origin, so rotation error can't turn into a sag at the part."""
+        R2 = _rot(q2)
         data = self.m.eq_data[eq_id]
-        data[0:3] = 0.0
-        data[3:6] = R1.T @ (np.asarray(p2) - np.asarray(p1))
+        data[0:3] = R2.T @ (np.asarray(p1) - np.asarray(p2))
+        data[3:6] = 0.0
         data[6:10] = _quat_mul(_quat_conj(q1), q2)
         data[10] = 1.0
 

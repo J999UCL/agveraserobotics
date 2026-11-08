@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .kinematics import QUAT_DOWN_FINGERS_X as FX
+from .kinematics import FRONT_APPROACH, QUAT_FRONT
 from .kinematics import QUAT_DOWN_FINGERS_Y as FY
 from .sim import DataCenterSim, Stopped
 
@@ -37,21 +37,31 @@ class Skills:
         return {"ok": ok, **kw, "status": self.sim.status()}
 
     # ------------------------------------------------------------ tray
+    def _grip_tab(self) -> np.ndarray:
+        """Approach the pull tab from the front (gripper tilted down at the rack) and close on it."""
+        s = self.sim
+        h = s.tray_handle_position()
+        pre = h - 0.09 * FRONT_APPROACH  # back along the approach direction: in front of and above the tab
+        s.open_gripper()
+        self._transit(pre[:2], quat=QUAT_FRONT)
+        s.move_tcp(pre, QUAT_FRONT, speed=0.15)
+        s.move_tcp(h, QUAT_FRONT, speed=0.06)
+        s.close_gripper()
+        return h
+
+    def _let_go_of_tab(self) -> None:
+        s = self.sim
+        s.open_gripper()
+        s.move_tcp(s.tcp_pose()[0] - 0.09 * FRONT_APPROACH, QUAT_FRONT, speed=0.12)
+
     def pull_tray_out(self) -> dict:
         s = self.sim
         if s.tray_extension() > s.cfg.tray.travel - 0.01:
             return self._result(True, note="tray already in service position")
         try:
-            s.open_gripper()
-            h = s.tray_handle_position()
-            self._transit(h[:2], quat=FX)
-            s.move_tcp(h + [0, 0, 0.06], FX, speed=0.15)
-            s.move_tcp(h, FX, speed=0.08)
-            s.close_gripper()
-            target = h - [s.cfg.tray.travel + 0.01, 0, 0]
-            s.move_tcp(target, FX, speed=0.10, settle=0.5)
-            s.open_gripper()
-            s.move_tcp(s.tcp_pose()[0] + [0, 0, 0.12], FX, speed=0.15)
+            h = self._grip_tab()
+            s.move_tcp(h - [s.cfg.tray.travel + 0.01, 0, 0], QUAT_FRONT, speed=0.10, settle=0.5)
+            self._let_go_of_tab()
         except Stopped:
             return self._result(False, error="stopped")
         ext = s.tray_extension()
@@ -62,15 +72,9 @@ class Skills:
         if s.holding():
             return self._result(False, error="put the part down first")
         try:
-            s.open_gripper()
-            h = s.tray_handle_position()
-            self._transit(h[:2], quat=FX)
-            s.move_tcp(h + [0, 0, 0.06], FX, speed=0.15)
-            s.move_tcp(h, FX, speed=0.08)
-            s.close_gripper()
-            s.move_tcp(h + [s.tray_extension() + 0.01, 0, 0], FX, speed=0.10, settle=0.5)
-            s.open_gripper()
-            s.move_tcp(s.tcp_pose()[0] + [0, 0, 0.12], FX, speed=0.15)
+            h = self._grip_tab()
+            s.move_tcp(h + [s.tray_extension() + 0.01, 0, 0], QUAT_FRONT, speed=0.10, settle=0.5)
+            self._let_go_of_tab()
             s.home()
         except Stopped:
             return self._result(False, error="stopped")
@@ -111,18 +115,18 @@ class Skills:
                 s.open_gripper()
                 s.move_tcp(g + [0, 0, 0.08], FY, speed=0.15)
                 return self._result(False, error="grasp missed", gripper=r)
-            peak = 0.0
-            for k in range(1, 13):  # lift 12 cm in 1 cm steps, watching the extraction force
-                s.move_tcp(g + [0, 0, 0.01 * k], FY, speed=0.03, settle=0.06)
+            # one smooth 12 cm lift, checking the extraction force every 20 ms
+            lifted = s.move_tcp(g + [0, 0, 0.12], FY, speed=0.04, settle=0.1,
+                                guard=lambda: "force" if s.pull_force() > ABORT_FORCE_N else None)
+            peak = s.peak_force()
+            if not lifted and s.guard_reason == "force":
                 f = s.pull_force()
-                peak = max(peak, s.peak_force())
-                if f > ABORT_FORCE_N:
-                    s.move_tcp(g + [0, 0, 0.002], FY, speed=0.02, settle=0.1)  # relieve tension first
-                    s.open_gripper()
-                    s.move_tcp(g + [0, 0, 0.08], FY, speed=0.15)
-                    s.health.log("warning", f"{slot}: extraction aborted at {f:.1f} N (part stuck)", slot=slot)
-                    return self._result(False, error="part stuck: extraction aborted to protect the socket",
-                                        peak_force_n=round(peak, 1), slot=slot)
+                s.move_tcp(g + [0, 0, 0.002], FY, speed=0.02, settle=0.1)  # relieve tension first
+                s.open_gripper()
+                s.move_tcp(g + [0, 0, 0.08], FY, speed=0.15)
+                s.health.log("warning", f"{slot}: extraction aborted at {f:.1f} N (part stuck)", slot=slot)
+                return self._result(False, error="part stuck: extraction aborted to protect the socket",
+                                    peak_force_n=round(peak, 1), slot=slot)
         except Stopped:
             return self._result(False, error="stopped")
         held = s.holding()

@@ -36,7 +36,7 @@ saves images to `outputs/sim_test/`.
 |---|---|
 | Robot | Franka Panda (MuJoCo Menagerie) at the origin of the cart |
 | Rack | 42U cabinet, rack front 0.70 m from the robot |
-| Server tray | 2U, slides out 0.32 m on rails by its red handle |
+| Server tray | 2U, slides out 0.32 m on rails. The robot grips its red pull tab from the front (gripper tilted 75° down) |
 | RAM | 8 DIMMs, slots `A1`-`A8` (abstracted: thicker and wider spaced than real ones so the fingers fit) |
 | Fans | 5 fan modules with blue lift tabs, slots `F1`-`F5` |
 | Static | 4 front drives, 2 CPU heatsinks, PSU |
@@ -47,7 +47,7 @@ Default faults: **A3** (uncorrectable ECC errors) and **F2** (stalled fan). `res
 
 ## Physics, briefly
 
-- **The tray** is a drawer on a slide joint. The gripper physically drags it by the handle.
+- **The tray** is a drawer on a slide joint. Closing the gripper on its pull tab pins the fingertips to it, so the arm drags it along the rails.
 - **RAM and fans** are free bodies held by weld constraints that switch on and off:
   - **Seated** parts are welded to their slot.
   - **Pulling** a gripped part stretches a virtual spring: about 12 N unseats a healthy part.

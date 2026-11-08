@@ -38,11 +38,14 @@ class TrayCfg:
     bottom_z: float = 0.03  # world z of the tray floor (~0.43 m above the real floor)
     travel: float = 0.32  # how far it slides out on its rails to the service position
     board_z: float = 0.006  # top of the motherboard
-    # handle: a bar across the front, gripped top-down with fingers closing along X
-    handle_x: float = -0.045
-    handle_z: float = 0.075
-    handle_len: float = 0.16
-    handle_thick: float = 0.014
+    # handle: a vertical pull tab sticking out of the front bezel. Gripped from the FRONT,
+    # gripper tilted 75 deg down, fingers closing on its sides (along Y). The hand stays in
+    # front of the rack the whole time.
+    handle_x: float = -0.032  # tab center (tray frame)
+    handle_z: float = 0.068  # near the top of the bezel: keeps the whole pull inside the arm's reach
+    handle_len: float = 0.055  # how far it sticks out (X)
+    handle_height: float = 0.036
+    handle_thick: float = 0.012  # Y
     # fan wall
     fan_x: float = 0.12
     fan_size: tuple[float, float, float] = (0.05, 0.07, 0.06)  # x, y, z

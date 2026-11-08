@@ -118,6 +118,10 @@ def build_spec(cfg: SimCfg | None = None) -> tuple[mujoco.MjSpec, Layout]:
     tray = _build_tray(spec, wb, cfg, slots)
     _build_cart_slots(wb, cfg, slots)
     components = _build_components(spec, wb, cfg, slots, tray)
+    # "gripping the pull tab": pins the fingertip point to the tray (set + switched on at runtime)
+    grip = spec.add_equality(name="grip_handle", type=mujoco.mjtEq.mjEQ_CONNECT, objtype=mujoco.mjtObj.mjOBJ_BODY,
+                             name1="hand", name2="tray", active=False, solref=[0.02, 1.0])
+    grip.data = np.zeros(len(grip.data))
     return spec, Layout(slots, components)
 
 
@@ -221,12 +225,10 @@ def _build_tray(spec, wb, cfg: SimCfg, slots: dict[str, SlotDef]):
     for i, y in enumerate((-0.15, -0.05, 0.05, 0.15)):
         v(f"drive_{i}", [0.04, y, H / 2], [0.035, 0.045, 0.03], [0.12, 0.12, 0.14, 1])
         v(f"drive_{i}_led", [0.004, y + 0.035, H / 2 + 0.022], [0.002, 0.003, 0.003], [0, 1, 0.2, 1], "led_ok")
-    # handle (gripped top-down, fingers along X); only the gripper collides with it
-    hx, hz = t.handle_x, t.handle_z
-    _box(tray, "tray_handle", [hx, 0, hz], [t.handle_thick / 2, t.handle_len / 2, t.handle_thick / 2],
+    # pull tab (gripped from the front, fingers on its sides); only the gripper collides with it
+    _box(tray, "tray_handle", [t.handle_x, 0, t.handle_z], [t.handle_len / 2, t.handle_thick / 2, t.handle_height / 2],
          [0.85, 0.15, 0.1, 1], 1, 0)
-    for side, sy in (("l", 1), ("r", -1)):
-        v(f"handle_arm_{side}", [hx / 2, sy * (t.handle_len / 2 - 0.007), hz], [-hx / 2, 0.007, 0.007], [0.85, 0.15, 0.1, 1])
+    v("handle_base", [-0.002, 0, t.handle_z], [0.003, 0.03, t.handle_height / 2 + 0.006], [0.6, 0.1, 0.08, 1])
     # CPUs + PSU (static)
     for i, y in enumerate(t.cpu_ys):
         v(f"cpu_{i}", [t.cpu_x, y, t.board_z + 0.03], [0.045, 0.045, 0.03], HEATSINK)

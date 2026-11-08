@@ -39,7 +39,7 @@ Part status values: `ok`, `degraded` (e.g. high correctable ECC rate, slow fan),
 
 | Call | Does |
 |---|---|
-| `move_tcp(x, y, z, orientation="fingers_y")` | straight-line move of the gripper tip, pointing down. `fingers_x` is for the tray handle |
+| `move_tcp(x, y, z, orientation="fingers_y")` | smooth straight-line move of the gripper tip, pointing down |
 | `open_gripper()` / `close_gripper()` | close reports which part it's holding |
 | `get_status()` | gripper position, holding, pull force, tray extension, joints |
 | `get_pull_force()` | current and peak extraction force (N) |
