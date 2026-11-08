@@ -46,10 +46,27 @@ class PathCheck:
         return self.status == "clear"
 
 
+def prepare_points(cap: Capture, step: int = 2, gripper_exclude_m: float = 0.03,
+                   ignore_mask: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Back-project the depth image once (every `step`-th pixel) -> (points h x w x 3, valid mask).
+    Pass the result to several check_path(..., points=...) calls on the same frame."""
+    h, w = cap.depth.shape
+    K = cap.K
+    vs, us = np.mgrid[0:h:step, 0:w:step].astype(np.float32)
+    z = cap.depth[::step, ::step].astype(np.float32)
+    valid = np.isfinite(z) & (z > gripper_exclude_m)
+    if ignore_mask is not None:
+        valid &= ~np.asarray(ignore_mask, bool)[::step, ::step]
+    z = np.where(valid, z, 0)
+    pc = np.stack([(us + 0.5 - K[0, 2]) * z / K[0, 0], (vs + 0.5 - K[1, 2]) * z / K[1, 1], z], -1)
+    R, tt = cap.T_base_cam[:3, :3].astype(np.float32), cap.T_base_cam[:3, 3].astype(np.float32)
+    return pc @ R.T + tt, valid
+
+
 def check_path(cap: Capture, start_xyz, goal_xyz, radius: float = 0.05, goal_margin: float = 0.025,
                start_margin: float = 0.02, gripper_exclude_m: float = 0.03, ignore_mask: np.ndarray | None = None,
                min_obstacle_px: int = 25, min_verified: float = 0.7, step: int = 2, n_axial: int = 24,
-               n_around: int = 8) -> PathCheck:
+               n_around: int = 8, points: tuple | None = None) -> PathCheck:
     """radius: gripper half-width plus safety margin. goal_margin: stop checking this far before the
     goal (the part being grabbed is supposed to be there). ignore_mask: H x W bool, True where the
     robot's own fingers appear in a wrist camera (they sit in a fixed spot of the image). Prefer it to
@@ -67,15 +84,7 @@ def check_path(cap: Capture, start_xyz, goal_xyz, radius: float = 0.05, goal_mar
     # 1) Anything inside the cylinder? Back-project the depth image (every `step`-th pixel).
     h, w = cap.depth.shape
     K = cap.K
-    vs, us = np.mgrid[0:h:step, 0:w:step].astype(np.float32)
-    z = cap.depth[::step, ::step].astype(np.float32)
-    valid = np.isfinite(z) & (z > gripper_exclude_m)
-    if ignore_mask is not None:
-        valid &= ~np.asarray(ignore_mask, bool)[::step, ::step]
-    z = np.where(valid, z, 0)
-    pc = np.stack([(us + 0.5 - K[0, 2]) * z / K[0, 0], (vs + 0.5 - K[1, 2]) * z / K[1, 1], z], -1)
-    R, tt = cap.T_base_cam[:3, :3].astype(np.float32), cap.T_base_cam[:3, 3].astype(np.float32)
-    P = pc @ R.T + tt
+    P, valid = points if points is not None else prepare_points(cap, step, gripper_exclude_m, ignore_mask)
     rel = P - a.astype(np.float32)
     along = rel @ u.astype(np.float32)
     radial = np.linalg.norm(rel - along[..., None] * u.astype(np.float32), axis=-1)
