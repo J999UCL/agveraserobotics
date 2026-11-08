@@ -36,6 +36,36 @@ scan.summary()         # short text for logs / the reasoning agent
 
 `server_target()` is map knowledge (where a server is), which api.md allows.
 
+## Approach-path check (any simulator)
+
+`corridor.py` answers "can the gripper move from here to there?" from one RGB-D frame. It works
+with any scene that provides a camera frame and its pose: Jeet's scene, Emanak's simulator via
+`adapter.py`, or a real robot.
+
+```python
+from vision.corridor import ApproachMonitor, check_path
+
+check = check_path(cap, start_xyz=tool_now, goal_xyz=grab_point)   # base frame
+check.status       # "clear" | "blocked" | "unknown"
+check.blocked_at   # metres ahead to the first obstruction
+check.reasons      # e.g. "something is in the path 12 cm ahead (0.5 cm from its centre line)"
+
+mon = ApproachMonitor(grab_point)              # every frame while the arm moves:
+action, check = mon.update(cap, tool_now)      # "continue" | "slow" | "stop"
+```
+
+**How it decides:**
+- **`blocked`:** something is inside the gripper's path, a cylinder of radius 5 cm by default.
+- **`unknown`:** less than 70% of the path could actually be seen to be empty, because it's out of view or hidden behind something. The robot slows down and looks again rather than assuming it's clear (rubric 2.3).
+- **Resuming after a stop** needs two clear frames in a row.
+
+**For wrist cameras:** pass `ignore_mask`, the pixels where the robot's own fingers appear, rather than a large distance margin. Something that drops in right in front of the gripper must still be seen.
+
+On Jeet's scene it also flags the **server handle** next to the rightmost drive latches for a 10 cm-wide gripper, which is a real collision risk worth telling the controller about.
+
+`python -m vision.approach_demo` writes the frames of a cable dropping into the path mid-approach
+(continue → stop → resume → slow final approach) to `out/`.
+
 ## Run
 
 ```powershell
