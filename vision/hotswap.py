@@ -59,16 +59,18 @@ class Scan:
     def bay(self, i: int) -> BayObs | None:
         return next((b for b in self.bays if b.bay == i), None)
 
-    def path_blocked(self, b: BayObs, corridor: float = 0.08) -> bool:
-        """Is anything in the gripper's approach corridor in front of this bay (or hiding its LED)?"""
+    def path_blocked(self, b: BayObs, corridor: float = 0.08, corridor_z: float | None = None) -> bool:
+        """Is anything in the gripper's approach corridor in front of this bay (or hiding its LED)?
+        corridor / corridor_z: half-width / half-height of the gripper's approach path."""
         if b.led == "hidden":
             return True
         if not self.rack_right or not self.obstacles:
             return False
+        cz = corridor if corridor_z is None else corridor_z
         p = np.asarray(b.tab_xyz_base)
         s = float(p @ np.asarray(self.rack_right))
         return any(o.span_s[0] - corridor <= s <= o.span_s[1] + corridor
-                   and o.span_z[0] - corridor <= p[2] <= o.span_z[1] + corridor for o in self.obstacles)
+                   and o.span_z[0] - cz <= p[2] <= o.span_z[1] + cz for o in self.obstacles)
 
     def faults(self) -> list[BayObs]:
         return [b for b in self.bays if b.status == "fault"]
@@ -164,6 +166,11 @@ class HotSwapPerception:
         """target_xyz: centre of the server's drive area in the base frame (map knowledge, allowed by
         api.md). When given, only that server's LEDs are used, so servers above/below don't confuse
         the bay numbering. Without it, every LED on the rack face is used."""
+        return self.scan_many(cap, [target_xyz])[0]
+
+    def scan_many(self, cap: Capture, targets: list) -> list[Scan]:
+        """One frame, several servers: the rack face and obstacles are found once, then each target
+        server's bays are read. Returns one Scan per target (obstacles shared)."""
         t0 = time.perf_counter()
         notes: list[str] = []
         P, valid = base_points(cap, self.step)  # half resolution is plenty for planes and obstacles
@@ -176,38 +183,69 @@ class HotSwapPerception:
         f_h = f - (f @ up) * up
         if np.linalg.norm(f_h) < 0.3:
             notes.append("camera is looking too steeply up/down to see a rack face")
-            return Scan([], [], None, None, (time.perf_counter() - t0) * 1000, notes)
+            return [Scan([], [], None, None, (time.perf_counter() - t0) * 1000, list(notes)) for _ in targets]
         f_h /= np.linalg.norm(f_h)
         r_h = np.cross(f_h, up)
 
-        plane = self._rack_plane(P[valid], cam, f_h, r_h)
+        leds_all = self._led_points(cap)
+        plane = self._rack_plane(P[valid], cam, f_h, r_h, np.array([l[3] for l in leds_all]) if leds_all else None)
         if plane is None:
             notes.append("couldn't find the rack face: move so the server fills more of the view")
-            return Scan([], [], None, None, (time.perf_counter() - t0) * 1000, notes)
+            return [Scan([], [], None, None, (time.perf_counter() - t0) * 1000, list(notes)) for _ in targets]
         n, d = plane
         dist = P @ n + d  # >0 = in front of the rack face (towards the robot)
         # From here on use the rack's own axes (orthonormal, horizontal): "in" and "right" along the face.
         f_h = -n - (-n @ up) * up
         f_h /= np.linalg.norm(f_h)
         r_h = np.cross(f_h, up)
-        bays, led_pts = self._bays(cap, n, d, notes, f_h, r_h, target_xyz)
-        if len(led_pts):  # watch for obstacles over this server's drive area
-            sz = np.column_stack([led_pts @ r_h, led_pts[:, 2]])
-            lo, hi = sz.min(axis=0) - 0.06, sz.max(axis=0) + 0.06
+        per_target = []
+        for target in targets:
+            tnotes = list(notes)
+            bays, led_pts = self._bays(cap, n, d, tnotes, f_h, r_h, target, leds_all)
+            per_target.append((bays, led_pts, tnotes))
+        all_leds = [p for _, pts, _ in per_target for p in pts]
+        if all_leds:  # watch for obstacles over the drive areas we're looking at
+            pts = np.array(all_leds)
+            sz = np.column_stack([pts @ r_h, pts[:, 2]])
+            pad = np.array([0.10, 0.06])  # wider sideways: latches/handles sit beside the LEDs
+            lo, hi = sz.min(axis=0) - pad, sz.max(axis=0) + pad
         else:
             on_face = valid & (np.abs(dist) < 0.012)
             sz = np.column_stack([P[on_face] @ r_h, P[on_face][:, 2]])
             lo, hi = np.percentile(sz, 1, axis=0), np.percentile(sz, 99, axis=0)
         obstacles = self._obstacles(cap, P, valid, dist, lo, hi, r_h)
-        return Scan(bays, obstacles, [round(float(v), 4) for v in n], round(float(d), 4),
-                    (time.perf_counter() - t0) * 1000, notes, [round(float(v), 5) for v in r_h])
+        ms = (time.perf_counter() - t0) * 1000
+        nl, rl = [round(float(v), 4) for v in n], [round(float(v), 5) for v in r_h]
+        return [Scan(bays, obstacles, nl, round(float(d), 4), ms, tnotes, rl) for bays, _, tnotes in per_target]
 
     # ------------------------------------------------------------------ rack face
+    def _led_points(self, cap: Capture) -> list:
+        """Every glowing LED in the frame with its 3D position (base frame): [(colour, u, v, xyz)]."""
+        leds = find_leds(cap.rgb)
+        if not leds:
+            return []
+        h, w = cap.depth.shape
+        uv = np.array([[u, v] for _, u, v in leds])
+        ui = np.clip(np.round(uv[:, 0]).astype(int), 1, w - 2)
+        vi = np.clip(np.round(uv[:, 1]).astype(int), 1, h - 2)
+        d3 = np.arange(-1, 2)
+        patch = cap.depth[vi[:, None, None] + d3[None, :, None], ui[:, None, None] + d3[None, None, :]].reshape(len(leds), 9)
+        patch = np.where(np.isfinite(patch) & (patch > 0), patch, np.nan)
+        good = ~np.all(np.isnan(patch), axis=1)
+        z = np.full(len(leds), np.nan)
+        z[good] = np.nanmedian(patch[good], axis=1)  # median of the 3x3 window around each LED
+        K = cap.K
+        pc = np.column_stack([(uv[:, 0] - K[0, 2]) * z / K[0, 0], (uv[:, 1] - K[1, 2]) * z / K[1, 1], z])
+        pb = pc @ cap.T_base_cam[:3, :3].T + cap.T_base_cam[:3, 3]
+        return [(c, u, v, pb[i]) for i, (c, u, v) in enumerate(leds) if good[i]]
+
     def _rack_plane(self, pts: np.ndarray, cam: np.ndarray, f_h: np.ndarray, r_h: np.ndarray,
-                    bin_m: float = 0.004, min_frac: float = 0.04, tol: float = 0.008):
-        """The cart stops square to the cabinet, so the server front shows up as a sharp peak in the
-        histogram of distance along the viewing direction. Take the NEAREST strong peak (cabinets /
-        walls behind it can be bigger), then refine with a least-squares plane so small tilts are handled."""
+                    led_pts: np.ndarray | None = None, bin_m: float = 0.004, min_frac: float = 0.04,
+                    tol: float = 0.008):
+        """The cart stops square to the cabinet, so flat surfaces facing the robot show up as sharp
+        peaks in the histogram of distance along the viewing direction. Candidates: every strong,
+        wide peak. Choose the one the status LEDs sit on (server handles in front and cabinet walls
+        behind can be bigger); without LEDs, the nearest. Refined with a least-squares plane."""
         if len(pts) < 500:
             return None
         x = pts @ f_h
@@ -216,60 +254,67 @@ class HotSwapPerception:
             hi = lo + bin_m * 4
         hist, edges = np.histogram(x, bins=max(int((hi - lo) / bin_m), 4), range=(lo, hi))
         smooth = np.convolve(hist, [1, 1, 1], mode="same")
-        strong = np.nonzero(smooth >= min_frac * len(x))[0]
-        i, tried = 0, set()
-        for s in strong:  # nearest first
-            if s in tried:
-                continue
-            i = s
-            while i + 1 < len(smooth) and smooth[i + 1] >= smooth[i]:  # climb to the top of that peak
-                i += 1
-            tried.update(range(s, i + 1))
-            x0 = 0.5 * (edges[i] + edges[i + 1])
-            inl = pts[np.abs(x - x0) < tol]
+        thr = min_frac * len(x)
+        left = np.r_[-1, smooth[:-1]]
+        right = np.r_[smooth[1:], -1]
+        tops = np.nonzero((smooth >= thr) & (smooth >= left) & (smooth > right))[0]  # peak tops, nearest first
+        x0s = 0.5 * (edges[tops] + edges[tops + 1])
+        if led_pts is not None and len(led_pts):
+            # cheap ranking first: candidates with the most LEDs on them, then the nearest
+            lx = led_pts @ f_h
+            votes = np.array([int((np.abs(lx - x0) < 0.025).sum()) for x0 in x0s])
+            x0s = x0s[np.lexsort((np.arange(len(x0s)), -votes))]
+        for x0 in x0s:
+            # A generous slice first: a face seen slightly at an angle spreads over several bins.
+            inl = pts[np.abs(x - x0) < 0.03]
             if len(inl) < 200:
-                continue
-            # A server front is wide and flat; a cable or tool close to the camera is not.
-            s = inl @ r_h
-            wy = np.percentile(s, 95) - np.percentile(s, 5)
-            wz = np.percentile(inl[:, 2], 95) - np.percentile(inl[:, 2], 5)
-            if wy < 0.12 or wz < 0.03:
                 continue
             if len(inl) > 20000:
                 inl = inl[self.rng.choice(len(inl), 20000, replace=False)]
-            c = inl.mean(axis=0)
-            _, evecs = np.linalg.eigh((inl - c).T @ (inl - c))
+            near = inl[np.abs(inl @ f_h - x0) < tol]  # seed the fit with the peak itself
+            if len(near) < 50:
+                continue
+            c = near.mean(axis=0)
+            _, evecs = np.linalg.eigh((near - c).T @ (near - c))
             n = evecs[:, 0]
-            # refine: tabs, LEDs and recessed chassis near the face pull the first fit off; keep tight inliers
-            for t2 in (0.004, 0.0025):
-                tight = inl[np.abs((inl - c) @ n) < t2]
-                if len(tight) < 100:
+            if n @ f_h < 0:
+                n = -n
+            if abs(n @ f_h) < 0.7:  # the seed stripe is too thin to orient: assume square to the camera
+                n = f_h.copy()
+            # refine against the plane (not the bin): tabs, LEDs and recessed chassis pull a loose fit off
+            tight = near
+            for t2 in (tol, 0.004, 0.0025):
+                cand = inl[np.abs((inl - c) @ n) < t2]
+                if len(cand) < 100:
                     break
+                tight = cand
                 c = tight.mean(axis=0)
                 _, evecs = np.linalg.eigh((tight - c).T @ (tight - c))
                 n = evecs[:, 0]
             if abs(n @ f_h) < 0.9:  # not facing the camera
                 continue
+            # A server front is wide and flat; a cable or tool close to the camera is not.
+            s = tight @ r_h
+            wy = np.percentile(s, 95) - np.percentile(s, 5)
+            wz = np.percentile(tight[:, 2], 95) - np.percentile(tight[:, 2], 5)
+            if wy < 0.12 or wz < 0.03:
+                continue
             if n @ (cam - c) < 0:
                 n = -n
-            return n, float(-n @ c)
+            return n, float(-n @ c)  # best-ranked valid candidate
         return None
 
     # ------------------------------------------------------------------ bays from LEDs
-    def _bays(self, cap: Capture, n, d, notes, f_h, r_h, target_xyz=None):
-        leds = []
+    def _bays(self, cap: Capture, n, d, notes, f_h, r_h, target_xyz=None, leds_all=None):
         t = None if target_xyz is None else np.asarray(target_xyz, float)
-        for colour, u, v in find_leds(cap.rgb):
-            z = depth_at(cap.depth, u, v, r=1)
-            if z is None:
-                continue
-            pc = np.array([(u - cap.K[0, 2]) * z / cap.K[0, 0], (v - cap.K[1, 2]) * z / cap.K[1, 1], z])
-            p = cap.T_base_cam[:3, :3] @ pc + cap.T_base_cam[:3, 3]
-            if abs(p @ n + d) > 0.025:  # LEDs sit on the rack face
-                continue
-            if t is not None and (abs(p[2] - t[2]) > self.window_z or abs((p - t) @ r_h) > self.window_s):
-                continue  # another server's LED
-            leds.append((colour, u, v, p))
+        cand = leds_all if leds_all is not None else self._led_points(cap)
+        leds = []
+        if cand:
+            arr = np.array([l[3] for l in cand])
+            keep = np.abs(arr @ n + d) <= 0.025  # LEDs sit on the rack face
+            if t is not None:  # and belong to the target server, not the ones around it
+                keep &= (np.abs(arr[:, 2] - t[2]) <= self.window_z) & (np.abs((arr - t) @ r_h) <= self.window_s)
+            leds = [cand[i] for i in np.nonzero(keep)[0]]
         if not leds:
             notes.append("no status LEDs visible" + (" on the target server" if t is not None else ""))
             return [], np.zeros((0, 3))

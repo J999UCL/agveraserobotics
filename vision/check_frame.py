@@ -9,7 +9,7 @@ In the Isaac Sim script (Emanak's side), save a frame with:
              check_xyz=np.array([pixel_to_base(u, v, f.depth[v, u], f) for u, v in [[320, 240], [100, 100], [540, 100], [100, 380], [540, 380]]]))
 
 Then here:
-    python -m perception.check_frame frame_001.npz [--rows 3 --cols 4] [--axes usd|opencv]
+    python -m vision.check_frame frame_001.npz [--rows 3 --cols 4] [--axes usd|opencv]
 """
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 
-from perception.adapter import capture_from_wrist_frames
-from perception.hotswap import HotSwapPerception
+from vision.adapter import capture_from_wrist_frames
+from vision.hotswap import HotSwapPerception
 
 
 def main() -> None:
@@ -45,7 +45,7 @@ def main() -> None:
             for (u, v) in table:
                 masked[v, u] = frames.depth[v, u]
             check = SimpleNamespace(**{**vars(frames), "depth": masked})
-            from perception.adapter import detect_axes
+            from vision.adapter import detect_axes
             axes = detect_axes(check, lambda u, v, d, fr: table[(int(u), int(v))])
             print(f"{path}: camera convention detected as '{axes}'")
         else:

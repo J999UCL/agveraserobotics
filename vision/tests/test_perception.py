@@ -7,9 +7,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from perception import Perception
-from perception.geometry import backproject, cv_pose_from_usd, project, transform
-from perception.synthetic import RACK_X, RACK_Z0, build, render
+from vision import Perception
+from vision.geometry import backproject, cv_pose_from_usd, project, transform
+from vision.synthetic import RACK_X, RACK_Z0, build, render
 
 CENTRE = [RACK_X, 0.0, RACK_Z0 + 0.08]
 VIEWS = {
@@ -115,7 +115,7 @@ def test_within_edge_budget(results):
 def test_geometry_roundtrip():
     rng = np.random.default_rng(0)
     K = np.array([[500, 0, 320], [0, 500, 240], [0, 0, 1.0]])
-    from perception.synthetic import look_at
+    from vision.synthetic import look_at
     T = look_at([0.1, 0.2, 1.0], [0.8, 0.0, 0.9])
     for _ in range(50):
         p = np.array([0.8, 0, 0.9]) + rng.normal(0, 0.1, 3)
