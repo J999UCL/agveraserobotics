@@ -7,5 +7,5 @@ __pycache__/
 !.env.example
 .runtime/
 out/
-perception/_assets/
+vision/_assets/
 .pytest_cache/
