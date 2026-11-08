@@ -1,0 +1,17 @@
+[project]
+name = "agentverse-robotics"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "google-genai>=3.0.0",
+    "imageio>=2.38.1",
+    "imageio-ffmpeg>=0.8.1",
+    "modal>=1.6.3",
+    "mujoco>=4.0.0",
+    "pillow>=13.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

@@ -6,3 +6,6 @@ __pycache__/
 .env.*
 !.env.example
 .runtime/
+
+# agent run outputs (traces, frames): kept local, regenerate with the runners
+robot/sandbox/runs/
