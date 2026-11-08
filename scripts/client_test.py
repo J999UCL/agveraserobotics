@@ -1,4 +1,4 @@
-"""Drive a running sim server through hotswap_client (any Python, no Isaac needed).
+"""Drive a running sim server end to end through the client (no MuJoCo needed).
 
     python scripts/client_test.py [host] [port]
 """
@@ -9,43 +9,45 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hotswap_client import SimClient  # noqa: E402
+from dcsim_client import SimClient  # noqa: E402
 
 host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
 port = int(sys.argv[2]) if len(sys.argv) > 2 else 5555
-out = Path(__file__).resolve().parents[1] / "outputs" / "client_test"
-out.mkdir(parents=True, exist_ok=True)
+sim, side = SimClient(host, port), SimClient(host, port)
+t0 = time.perf_counter()
+print("ping", sim.ping(), f"{(time.perf_counter() - t0) * 1000:.0f} ms")
+sim.reset()
+h = sim.get_server_health()
+bad = [x["slot"] for x in h["dimms"] + h["fans"] if x["status"] != "ok"]
+print("health:", h["overall"], "faulty:", bad)
+print("pull_tray_out:", sim.pull_tray_out()["ok"])
+img = side.capture_image("wrist")
+print("wrist image while idle:", img.shape)
 
-sim = SimClient(host, port)
-t0 = time.time()
-print("ping:", sim.ping(), f"({(time.time() - t0) * 1000:.0f} ms)")
-print("status:", {k: v for k, v in sim.get_status().items() if k != "joints"})
-print("telemetry:", sim.get_telemetry())
-print("go_to_cabinet(0):", sim.go_to_cabinet(0))
-print("view_rack:", sim.view_rack())
-
-t0 = time.time()
-f = sim.get_wrist_frames()
-print(f"frames: rgb {f.rgb.shape}, depth {f.depth.shape} [{f.depth[f.depth > 0].min():.3f}, {f.depth.max():.3f}] m "
-      f"in {(time.time() - t0) * 1000:.0f} ms")
-from PIL import Image  # noqa: E402
-Image.fromarray(f.rgb).save(out / "wrist.png")
-u, v = 320, 240
-print("center pixel -> robot (server):", sim.get_robot_coords_at(u, v), " (client):", f.pixel_to_robot(u, v).round(4).tolist())
-
-# stop from a second connection while a long move runs
-mover = SimClient(host, port)
-res = {}
-th = threading.Thread(target=lambda: res.update(mover.move_hand_to([0.30, 0.15, 0.58], max_speed=0.05)))
-th.start()
-time.sleep(1.5)
-print("busy rejection:", end=" ")
+# watch the run from a second connection while the swap happens
+seen = []
+done = threading.Event()
+def watch():
+    while not done.is_set():
+        st = side.get_status()
+        seen.append(st["holding"])
+        time.sleep(0.3)
+threading.Thread(target=watch, daemon=True).start()
+for slot in bad:
+    r = sim.swap(slot)
+    print(f"swap {slot}:", r["ok"], [(s["step"], s["ok"]) for s in r.get("steps", [])])
+done.set()
+print("side connection saw holding:", sorted({s for s in seen if s}))
+sim.step(200)
+h = sim.get_server_health()
+print("health after:", h["overall"], "temps", h["cpu_temps_c"])
+print("busy rejection test:", end=" ")
+th = threading.Thread(target=lambda: sim.push_tray_in())
+th.start(); time.sleep(0.5)
 try:
-    sim.view_rack()
+    side.view_tray()
 except Exception as e:
     print(e)
-print("force while moving:", sim.get_pull_force(), " stop:", sim.stop())
 th.join()
-print("move result after stop:", res)
-print("reset:", sim.reset())
+print("tray:", side.get_status()["tray"])
 print("done")

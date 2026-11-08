@@ -1,97 +1,78 @@
-# Autonomous data-center hot-swap robot
+# Autonomous data-center maintenance robot (MuJoCo)
 
-Agentverse Hackathon, Robotics Track. A Franka Panda on a maintenance cart drives along an
-aisle of 42U server cabinets, inspects a storage server with a wrist RGB-D camera, finds the
-drive caddy with the amber fault LED, and pulls it out. It reacts to a cable falling into its
-path and must abort when a caddy is jammed.
-
-Simulated in **NVIDIA Isaac Sim 6.0**. It runs on a local RTX GPU or on a **Modal** cloud GPU,
-and teammates drive it over TCP from any machine.
+Agentverse Hackathon, Robotics Track. A Franka Panda on a service cart diagnoses a server
+from its health telemetry, pulls the server tray out of the rack, and hot-swaps failed RAM
+sticks and fan modules using spares from its cart. Agents reason over diagnostics and camera
+images and call the robot's skills.
 
 ```
- your code / Claude (isaac-mcp)            Modal GPU (or a local PC)
- ┌──────────────────────────┐   TCP    ┌──────────────────────────────────┐
- │ hotswap_client.SimClient │ ───────► │ run_sim_server.py                │
- │  perception, FSM, LLM    │ ◄─────── │  HotSwapScene (Isaac Sim, 60 Hz) │
- └──────────────────────────┘  JSON    └──────────────────────────────────┘
+ agents (LLM) ──MCP──► mcp_server.py ─┐
+ your Python ─────────► dcsim_client ─┼─ TCP/JSON ─► scripts/run_server.py
+                                      │               DataCenterSim (MuJoCo, 50 Hz control)
 ```
 
-## For the team: quick start
-
-### 1. Get a sim running (one person)
-
-**On Modal (recommended):**
-```bash
-pip install modal
-modal token new
-modal run --detach modal_app/sim.py
-```
-Wait for `SIM ADDRESS (share this): xxx.modal.host:12345` in the output (the first start takes
-several minutes while shaders compile). Anyone on the same Modal workspace can also run
-`python -m modal_app.address` to get it.
-
-**On a local Windows PC with Isaac Sim at `C:\isaacsim`:**
-```bash
-C:\isaacsim\python.bat scripts\run_sim_server.py           # add --headless for no window
-```
-The address is `localhost:5555`.
-
-### 2. Connect (everyone, any machine)
+## Run it
 
 ```bash
-pip install -r requirements-client.txt
-python scripts/client_test.py HOST PORT        # smoke test: moves the arm, grabs frames, tests stop
+pip install -r requirements.txt -r requirements-client.txt
+python scripts/run_server.py --viewer        # MuJoCo window + server on :5555
+python scripts/client_test.py                # in another terminal: full diagnose + swap via the client
 ```
 
-```python
-from hotswap_client import SimClient
-sim = SimClient("HOST", PORT)
-sim.go_to_cabinet(1); sim.view_rack()
-f = sim.get_wrist_frames()          # f.rgb, f.depth (m), f.K, f.pixel_to_robot(u, v)
-```
+`python scripts/sim_test.py` runs the same thing in-process (no server, a few seconds) and
+saves images to `outputs/sim_test/`.
 
-The full API is in [docs/api.md](docs/api.md).
-
-### 3. Claude Code / MCP (optional)
-
-`isaac_mcp/server.py` exposes the sim as MCP tools named like panda-mcp (`get_status`,
-`move_cartesian`, `gripper_grasp`, `capture_frame`, `get_robot_coords_at`, `stop`, ...) plus
-rack tools (`go_to_cabinet`, `view_rack`, `get_pull_force`, `set_jam`, `drop_obstacle`, ...).
-Add this to `.mcp.json` in your project:
+### MCP (Claude Code or any MCP client)
 
 ```json
-{
-  "mcpServers": {
-    "isaac-mcp": {
-      "command": "python",
-      "args": ["-m", "isaac_mcp.server"],
-      "cwd": "/path/to/this/repo",
-      "env": {"HOTSWAP_SIM": "HOST:PORT"}
-    }
-  }
-}
+{ "mcpServers": { "datacenter-robot": {
+    "command": "python", "args": ["mcp_server.py"], "cwd": "/path/to/repo",
+    "env": { "DCSIM": "localhost:5555" } } } }
 ```
 
-Keep the obstacle stop and the force abort in a local control loop (`ik_step` + `get_pull_force`).
-LLM calls are too slow to react inside a single move.
+## The scene
+
+| Thing | Details |
+|---|---|
+| Robot | Franka Panda (MuJoCo Menagerie) at the origin of the cart |
+| Rack | 42U cabinet, rack front 0.70 m from the robot |
+| Server tray | 2U, slides out 0.32 m on rails by its red handle |
+| RAM | 8 DIMMs, slots `A1`-`A8` (abstracted: thicker and wider spaced than real ones so the fingers fit) |
+| Fans | 5 fan modules with blue lift tabs, slots `F1`-`F5` |
+| Static | 4 front drives, 2 CPU heatsinks, PSU |
+| Cart | spares shelf (`CD1`-`CD4` RAM, `CF1`-`CF2` fans) on the right, used-parts bin on the left |
+| LEDs | per-DIMM fault LEDs on the board, a LED on each fan, a tray status LED: amber = fault |
+
+Default faults: **A3** (uncorrectable ECC errors) and **F2** (stalled fan). `reset(seed=N)` randomizes them.
+
+## Physics, briefly
+
+- **The tray** is a drawer on a slide joint. The gripper physically drags it by the handle.
+- **RAM and fans** are free bodies held by weld constraints that switch on and off:
+  - **Seated** parts are welded to their slot.
+  - **Pulling** a gripped part stretches a virtual spring: about 12 N unseats a healthy part.
+  - **Jammed** parts keep climbing. The `pick` skill aborts at 25 N; above 40 N the socket counts as damaged.
+  - **Unseated** parts attach to the gripper.
+  - **Placing:** lowering a held part onto a free slot within 12 mm seats it, and the server then "verifies" it for 3 s.
+  - **Discarding:** opening the gripper over the bin drops the part in.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `hotswap/config.py` | Every dimension and physics constant |
-| `hotswap/rack.py` | Procedural cabinets, 12-bay storage servers, filler servers, room |
-| `hotswap/physics.py` | Caddy slide joints, pull-force model, jam, release |
-| `hotswap/obstacle.py` | The falling cable |
-| `hotswap/robot.py` | Franka, cart, wrist + overview cameras, ready pose |
-| `hotswap/scene.py` | `HotSwapScene`: the in-process API |
-| `hotswap/server.py` | TCP server running inside the sim loop |
-| `hotswap_client.py` | Client (no Isaac needed) |
-| `isaac_mcp/` | MCP server over the client |
-| `modal_app/` | Modal image, sim server deployment, smoke test |
-| `scripts/` | `run_sim_server.py`, `env_test.py` (in-process test of every call), `client_test.py` |
+| `dcsim/config.py` | All dimensions and thresholds |
+| `dcsim/build.py` | Builds the MuJoCo model around the Menagerie Franka |
+| `dcsim/sim.py` | `DataCenterSim`: arm control, gripper, seating physics, LEDs, cameras |
+| `dcsim/health.py` | BMC-style diagnostics (ECC counts, fan RPM, temps, event log) |
+| `dcsim/skills.py` | Reference skills: tray in/out, pick, place, discard, swap |
+| `dcsim/kinematics.py` | IK for the gripper tip |
+| `dcsim/server.py`, `dcsim_client.py`, `mcp_server.py` | Network layer + agent tools |
+| `docs/api.md` | Every call, with arguments and results |
+
+The earlier Isaac Sim version is kept in git under the tag `isaac-sim-version`.
 
 ## Credits
 
-The MCP tool naming follows [panda-mcp](https://github.com/ratsbane/panda-mcp) (MIT licence).
-The Franka model comes from NVIDIA Isaac Sim's assets.
+Franka Panda model from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
+(Apache 2.0, licence in `assets/franka_emika_panda/LICENSE`). Skill-oriented MCP design inspired
+by [panda-mcp](https://github.com/ratsbane/panda-mcp) (MIT).
