@@ -1,0 +1,379 @@
+<mujoco><asset><material name="graphite" rgba=".055 .07 .09 1" specular=".25" shininess=".3" />
+    <material name="metal" rgba=".32 .38 .43 1" specular=".25" shininess=".3" />
+    <material name="cyan" rgba=".07 .65 .76 1" specular=".25" shininess=".3" />
+    <material name="white_trim" rgba=".72 .78 .82 1" specular=".25" shininess=".3" />
+    <mesh name="rack_mesh_0" file="../../assets/converted/rack_0.obj" />
+    <texture name="rack_tex_0" type="2d" file="../../assets/converted/rack_0.png" />
+    <material name="rack_mat_0" texture="rack_tex_0" specular=".3" shininess=".35" emission="0" />
+    <mesh name="rack_mesh_1" file="../../assets/converted/rack_1.obj" />
+    <texture name="rack_tex_1" type="2d" file="../../assets/converted/rack_1.png" />
+    <material name="rack_mat_1" texture="rack_tex_1" specular=".3" shininess=".35" emission="0" />
+    <mesh name="rack_mesh_2" file="../../assets/converted/rack_2.obj" />
+    <material name="rack_mat_2" rgba="0.7215686274509804 0.8784313725490196 0.9058823529411765 0.1607843137254902" specular=".3" shininess=".35" emission="0" />
+    <mesh name="rack_mesh_3" file="../../assets/converted/rack_3.obj" />
+    <material name="rack_mat_3" rgba="0.20392156862745098 0.48627450980392156 0.807843137254902 1.0" specular=".3" shininess=".35" emission=".55" />
+    <mesh name="rack_mesh_4" file="../../assets/converted/rack_4.obj" />
+    <material name="rack_mat_4" rgba="0.9215686274509803 0.6431372549019608 0.16862745098039217 1.0" specular=".3" shininess=".35" emission=".55" />
+    <mesh name="rack_mesh_5" file="../../assets/converted/rack_5.obj" />
+    <material name="rack_mat_5" rgba="0.27450980392156865 0.6509803921568628 0.4666666666666667 1.0" specular=".3" shininess=".35" emission=".55" />
+    <material name="hw_pcb" rgba=".025 .22 .12 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_solder" rgba=".63 .66 .59 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_chip" rgba=".025 .029 .032 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_alu" rgba=".58 .63 .68 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_copper" rgba=".65 .35 .12 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_socket" rgba=".13 .15 .18 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_ram" rgba=".035 .28 .16 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_blue" rgba=".035 .35 .7 1" specular=".35" shininess=".4" emission="0" />
+    <material name="hw_led" rgba=".12 .85 .43 1" specular=".35" shininess=".4" emission=".4" />
+    <material name="hw_chassis" rgba=".27 .31 .35 1" specular=".35" shininess=".4" emission="0" />
+    <mesh name="server_pcb" file="../../assets/converted/server_pcb.obj" />
+    <mesh name="server_solder" file="../../assets/converted/server_solder.obj" />
+    <mesh name="server_chip" file="../../assets/converted/server_chip.obj" />
+    <mesh name="server_alu" file="../../assets/converted/server_alu.obj" />
+    <mesh name="server_copper" file="../../assets/converted/server_copper.obj" />
+    <mesh name="server_socket" file="../../assets/converted/server_socket.obj" />
+    <mesh name="server_ram" file="../../assets/converted/server_ram.obj" />
+    <mesh name="server_blue" file="../../assets/converted/server_blue.obj" />
+    <mesh name="server_led" file="../../assets/converted/server_led.obj" />
+    <mesh name="server_chassis" file="../../assets/converted/server_chassis.obj" />
+    <texture name="rack_label_0" type="2d" file="../../assets/converted/rack_label_0.png" />
+    <material name="rack_label_0" texture="rack_label_0" texuniform="false" />
+    <texture name="rack_label_1" type="2d" file="../../assets/converted/rack_label_1.png" />
+    <material name="rack_label_1" texture="rack_label_1" texuniform="false" />
+    <texture name="rack_label_2" type="2d" file="../../assets/converted/rack_label_2.png" />
+    <material name="rack_label_2" texture="rack_label_2" texuniform="false" />
+    <texture name="rack_label_3" type="2d" file="../../assets/converted/rack_label_3.png" />
+    <material name="rack_label_3" texture="rack_label_3" texuniform="false" />
+    <mesh name="compact_server" file="server.obj" /><texture name="compact_tex" type="2d" file="server-palette.png" /><material name="compact_material" texture="compact_tex" /></asset><worldbody><body><body name="object" pos="1.28 -.8 0" quat="0 0 0 1">
+      <geom type="mesh" mesh="rack_mesh_0" material="rack_mat_0" contype="0" conaffinity="0" group="1" />
+      <geom name="r3_side_-1" type="box" pos="-0.285 .02 1" size=".015 .49 .95" material="graphite" group="0" />
+      <geom name="r3_side_1" type="box" pos="0.285 .02 1" size=".015 .49 .95" material="graphite" group="0" />
+      <geom name="r3_back" type="box" pos="0 .51 1" size=".27 .015 .96" material="graphite" group="0" />
+      <geom name="r3_top" type="box" pos="0 .02 1.98" size=".27 .49 .015" material="graphite" group="0" />
+      <geom name="r04_post_-0.25_-0.405" type="box" pos="-0.25 -0.405 1.025" size=".009 .012 .91" material="metal" group="1" />
+      <geom name="r04_post_-0.25_0.39" type="box" pos="-0.25 0.39 1.025" size=".009 .012 .91" material="metal" group="1" />
+      <geom name="r04_post_0.25_-0.405" type="box" pos="0.25 -0.405 1.025" size=".009 .012 .91" material="metal" group="1" />
+      <geom name="r04_post_0.25_0.39" type="box" pos="0.25 0.39 1.025" size=".009 .012 .91" material="metal" group="1" />
+      <geom name="r04_u01_fixedrail_-1" type="box" pos="-0.235 0 0.13" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u01_fixedrail_1" type="box" pos="0.235 0 0.13" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u01" pos="0 -.025 0.12">
+        <joint name="r04_u01_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u01_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u01_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u01_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u01_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u01_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u01_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u01_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u01_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u01_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u01_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u01_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u01_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u03_fixedrail_-1" type="box" pos="-0.235 0 0.2189" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u03_fixedrail_1" type="box" pos="0.235 0 0.2189" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u03" pos="0 -.025 0.2089">
+        <joint name="r04_u03_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u03_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u03_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u03_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u03_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u03_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u03_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u03_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u03_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u03_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u03_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u03_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u03_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u05_fixedrail_-1" type="box" pos="-0.235 0 0.3078" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u05_fixedrail_1" type="box" pos="0.235 0 0.3078" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u05" pos="0 -.025 0.2978">
+        <joint name="r04_u05_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u05_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u05_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u05_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u05_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u05_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u05_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u05_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u05_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u05_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u05_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u05_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u05_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u07_fixedrail_-1" type="box" pos="-0.235 0 0.39670000000000005" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u07_fixedrail_1" type="box" pos="0.235 0 0.39670000000000005" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u07" pos="0 -.025 0.38670000000000004">
+        <joint name="r04_u07_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u07_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u07_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u07_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u07_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u07_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u07_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u07_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u07_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u07_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u07_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u07_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u07_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u09_fixedrail_-1" type="box" pos="-0.235 0 0.48560000000000003" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u09_fixedrail_1" type="box" pos="0.235 0 0.48560000000000003" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u09" pos="0 -.025 0.4756">
+        <joint name="r04_u09_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u09_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u09_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u09_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u09_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u09_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u09_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u09_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u09_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u09_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u09_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u09_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u09_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u11_fixedrail_-1" type="box" pos="-0.235 0 0.5745" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u11_fixedrail_1" type="box" pos="0.235 0 0.5745" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u11" pos="0 -.025 0.5645">
+        <joint name="r04_u11_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u11_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u11_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u11_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u11_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u11_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u11_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u11_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u11_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u11_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u11_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u11_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u11_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u13_fixedrail_-1" type="box" pos="-0.235 0 0.6634000000000001" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u13_fixedrail_1" type="box" pos="0.235 0 0.6634000000000001" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u13" pos="0 -.025 0.6534000000000001">
+        <joint name="r04_u13_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u13_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u13_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u13_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u13_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u13_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u13_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u13_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u13_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u13_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u13_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u13_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u13_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u15_fixedrail_-1" type="box" pos="-0.235 0 0.7523000000000001" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u15_fixedrail_1" type="box" pos="0.235 0 0.7523000000000001" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u15" pos="0 -.025 0.7423000000000001">
+        <joint name="r04_u15_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u15_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u15_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u15_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u15_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u15_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u15_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u15_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u15_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u15_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u15_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u15_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u15_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u17_fixedrail_-1" type="box" pos="-0.235 0 0.8412000000000001" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u17_fixedrail_1" type="box" pos="0.235 0 0.8412000000000001" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u17" pos="0 -.025 0.8312">
+        <joint name="r04_u17_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u17_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u17_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u17_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u17_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u17_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u17_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u17_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u17_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u17_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u17_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u17_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u17_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u19_fixedrail_-1" type="box" pos="-0.235 0 0.9301" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u19_fixedrail_1" type="box" pos="0.235 0 0.9301" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u19" pos="0 -.025 0.9201">
+        <joint name="r04_u19_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u19_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u19_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u19_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u19_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u19_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u19_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u19_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u19_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u19_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u19_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u19_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u19_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u21_fixedrail_-1" type="box" pos="-0.235 0 1.019" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u21_fixedrail_1" type="box" pos="0.235 0 1.019" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u21" pos="0 -.025 1.009">
+        <joint name="r04_u21_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u21_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u21_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u21_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u21_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u21_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u21_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u21_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u21_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u21_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u21_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u21_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u21_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u23_fixedrail_-1" type="box" pos="-0.235 0 1.1079" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u23_fixedrail_1" type="box" pos="0.235 0 1.1079" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u23" pos="0 -.025 1.0979">
+        <joint name="r04_u23_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u23_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u23_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u23_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u23_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u23_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u23_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u23_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u23_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u23_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u23_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u23_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u23_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u25_fixedrail_-1" type="box" pos="-0.235 0 1.1968000000000003" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u25_fixedrail_1" type="box" pos="0.235 0 1.1968000000000003" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u25" pos="0 -.025 1.1868000000000003">
+        <joint name="r04_u25_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u25_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u25_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u25_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u25_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u25_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u25_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u25_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u25_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u25_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u25_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u25_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u25_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u27_fixedrail_-1" type="box" pos="-0.235 0 1.2857" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u27_fixedrail_1" type="box" pos="0.235 0 1.2857" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u27" pos="0 -.025 1.2757">
+        <joint name="r04_u27_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u27_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u27_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u27_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u27_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u27_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u27_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u27_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u27_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u27_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u27_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u27_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u27_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u29_fixedrail_-1" type="box" pos="-0.235 0 1.3746000000000003" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u29_fixedrail_1" type="box" pos="0.235 0 1.3746000000000003" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u29" pos="0 -.025 1.3646000000000003">
+        <joint name="r04_u29_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u29_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u29_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u29_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u29_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u29_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u29_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u29_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u29_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u29_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u29_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u29_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u29_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u31_fixedrail_-1" type="box" pos="-0.235 0 1.4635" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u31_fixedrail_1" type="box" pos="0.235 0 1.4635" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u31" pos="0 -.025 1.4535">
+        <joint name="r04_u31_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u31_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u31_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u31_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u31_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u31_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u31_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u31_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u31_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u31_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u31_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u31_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u31_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u33_fixedrail_-1" type="box" pos="-0.235 0 1.5524000000000002" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u33_fixedrail_1" type="box" pos="0.235 0 1.5524000000000002" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u33" pos="0 -.025 1.5424000000000002">
+        <joint name="r04_u33_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u33_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u33_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u33_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u33_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u33_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u33_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u33_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u33_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u33_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u33_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u33_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u33_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u35_fixedrail_-1" type="box" pos="-0.235 0 1.6413" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u35_fixedrail_1" type="box" pos="0.235 0 1.6413" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u35" pos="0 -.025 1.6313">
+        <joint name="r04_u35_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u35_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u35_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u35_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u35_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u35_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u35_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u35_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u35_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u35_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u35_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u35_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u35_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u37_fixedrail_-1" type="box" pos="-0.235 0 1.7302000000000002" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u37_fixedrail_1" type="box" pos="0.235 0 1.7302000000000002" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u37" pos="0 -.025 1.7202000000000002">
+        <joint name="r04_u37_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u37_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u37_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u37_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u37_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u37_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u37_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u37_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u37_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u37_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u37_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u37_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u37_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="r04_u39_fixedrail_-1" type="box" pos="-0.235 0 1.8191" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <geom name="r04_u39_fixedrail_1" type="box" pos="0.235 0 1.8191" size=".005 .37 .007" material="metal" contype="0" conaffinity="0" group="1" />
+      <body name="r04_u39" pos="0 -.025 1.8091">
+        <joint name="r04_u39_slide" type="slide" axis="0 -1 0" range="0 0.72" damping="18" frictionloss="4" armature=".1" limited="true" solreflimit=".015 1" />
+        <inertial pos="0 0 .035" mass="12" diaginertia=".58 .20 .78" />
+        <geom name="r04_u39_floor" type="box" pos="0 0 .003" size=".217 .377 .003" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u39_left" type="box" pos="-.218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u39_right" type="box" pos=".218 0 .04" size=".002 .377 .035" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u39_front" type="box" pos="0 -.382 .04" size=".24 .006 .039" material="hw_chassis" group="0" contype="1" conaffinity="1" />
+        <geom name="r04_u39_handlepost_-1_0.014" type="box" pos="-0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u39_handlepost_-1_0.066" type="box" pos="-0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u39_handle_-1" type="box" pos="-0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u39_handlepost_1_0.014" type="box" pos="0.225 -.418 0.014" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u39_handlepost_1_0.066" type="box" pos="0.225 -.418 0.066" size=".007 .027 .006" material="metal" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u39_handle_1" type="box" pos="0.225 -.444 .04" size=".007 .007 .032" material="white_trim" contype="1" conaffinity="1" group="1" />
+        <geom name="r04_u39_visual" type="mesh" mesh="compact_server" material="compact_material" group="1" contype="0" conaffinity="0" mass="0" /><site name="u39_region" quat="1 0 0 0" pos="0 0 .04" size=".23 .37 .04" type="box" rgba="0 0 0 0" /></body>
+      <geom name="rack_label_3" type="box" pos="0 -.476 1.935" size=".245 .004 .055" material="rack_label_3" contype="0" conaffinity="0" group="1" />
+    </body>
+    <site name="bottom_site" pos="0 0 0" size="0.001" rgba="0 0 0 0" /><site name="top_site" pos="0 0 2" size="0.001" rgba="0 0 0 0" /><site name="horizontal_radius_site" pos=".3 .53 0" size="0.001" rgba="0 0 0 0" /></body></worldbody></mujoco>
