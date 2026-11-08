@@ -11,3 +11,7 @@ vision/_assets/
 .pytest_cache/
 
 sim/episodes/
+
+# agent run outputs (traces, frames): kept local, regenerate with the runners
+robot/sandbox/runs/
+robot/arm/runs/

@@ -99,5 +99,6 @@ def populate(rack,rack_i,materials):
         for side in [-1,1]:
             x=side*.225
             for dz in [.014,.066]:box(tray,f'{ident}_handlepost_{side}_{dz}',f'{x} -.418 {dz}','.007 .027 .006','metal',contype='2',conaffinity='1')
-            box(tray,f'{ident}_handle_{side}',f'{x} -.444 .04','.007 .007 .032','white_trim',contype='2',conaffinity='1')
+            # Stiff contact (solref dominates via solmix) so a firm grip does not sink into the bar.
+            box(tray,f'{ident}_handle_{side}',f'{x} -.444 .04','.007 .007 .032','white_trim',contype='2',conaffinity='1',solref='.004 1',solmix='1000000')
             box(tray,f'{ident}_innerrail_{side}',f'{side*.227} 0 .018','.004 .36 .008','metal',contype='0',conaffinity='0')
