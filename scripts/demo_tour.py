@@ -124,8 +124,13 @@ for k in range(1, 121):
     sim.ik_step((start - [0.03 * k / 120, 0, 0]).tolist(), steps=1)
     force = sim.get_pull_force()
     if force > ABORT_N:
-        say(f"SAFE ABORT: pull force {force:.1f} N > {ABORT_N:.0f} N. Releasing before the connector breaks.", 0.5)
+        # React FIRST (the sim keeps running in real time), talk afterwards.
+        # 1) stop pulling: move the target slightly back toward the rack to relieve tension
+        hold = np.array(sim.hand_pose()["position"]) + [0.004, 0, 0]
+        sim.ik_step(hold.tolist(), steps=10)
+        # 2) only then open the fingers
         sim.open_gripper()
+        say(f"SAFE ABORT: pull force {force:.1f} N > {ABORT_N:.0f} N. Released before the connector broke.", 0.5)
         sim.move_relative(dx=-0.08)
         break
 print("    connector broken?", sim.connector_broken(), "| telemetry:", sim.get_telemetry()[-1])
