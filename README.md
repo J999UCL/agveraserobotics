@@ -1,4 +1,4 @@
-# Autonomous data-centre service robot
+# Caddy: An autonomous data-centre service robot
 
 **A robot for unmanned data centres that works out what's really broken, swaps it safely, and knows when not to touch anything.**
 
