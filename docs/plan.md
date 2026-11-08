@@ -49,7 +49,7 @@ Status: ☐ todo · ◐ in progress · ☑ done
 - Follow camera that tracks the robot + recorder (overview + wrist side by side → mp4).
 - Tray wall collision so the arm doesn't pass through the tray on camera.
 
-### 6. Ship ◐ (Modal done; GitHub push pending)
+### 6. Ship ☑
 - Push to GitHub; Modal (CPU, headless EGL/OSMesa) test; full end-to-end run on video.
 
 ## Not in scope
@@ -59,4 +59,4 @@ Status: ☐ todo · ◐ in progress · ☑ done
 - Phases 1-3 + restock/fleet health: a full work shift passes in `scripts/sim_test.py` (drive, pull tray, swap, push in, next server, home, restock, jam abort).
 - Phase 4: work orders open on faults and resolve when the new part verifies; server/client/22 MCP tools updated; full shift passes over TCP (`scripts/client_test.py`).
 - Phase 5: lidar (37 rangefinders, only active while driving), technician obstacle (stop/wait/resume/give up), tray rail latch + solid tray walls, held parts stop colliding, follow camera, MP4 recorder (`scripts/record_demo.py`).
-- Phase 6: Modal CPU deployment (`modal_app/sim.py`): headless check passes; a full shift ran from a laptop through the Modal tunnel.
+- Phase 6: Modal CPU deployment (`modal_app/sim.py`): headless check passes; a full shift ran from a laptop through the Modal tunnel. Pushed to https://github.com/emanak007/AgentVerseBob2.

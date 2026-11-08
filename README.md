@@ -14,6 +14,8 @@ Python client.
                                       │                 DataCenterSim (MuJoCo, 50 Hz control)
 ```
 
+**Team: every API call (Python client and MCP tools) is listed in [docs/api.md](docs/api.md).**
+
 ## Run it
 
 ```bash
