@@ -30,12 +30,19 @@ Each rail is a bounded 0–720 mm MuJoCo slide joint with damping, friction and 
 
 ## Service base: rail and lift
 
-The Panda sits on a lift (up/down, 1.3 m stroke) on a carriage that runs on a floor rail along the aisle (left/right, x from −1.5 to 1.5 m, 0.43 m in front of the rack fronts). Both are position-servoed slide joints; the lift's servo cancels the weight it carries. At home the base is parked beside rack 4 with the arm folded, clear of every tray.
+The Panda sits on a lift (up/down, 1.55 m stroke) on a carriage that runs on a floor rail along the aisle (left/right, x from −1.5 to 1.5 m, 0.43 m in front of the rack fronts). Both are position-servoed slide joints; the lift's servo cancels the weight it carries. At home the base is parked beside rack 4 with the arm folded, clear of every tray.
 
-`robot/arm/base.py` lines the arm up with a server: `Base(m, d).go_to(rack, u)` stands the arm 0.5 m to the right of that tray (so a fully extended tray slides past it) with its shoulder level with the handles. It refuses to move while a tray is open or a part is held, folds the arm first, and stops in place on any contact (reported as `BLOCKED`). Same calls, same motion: the tests check that two runs are bit-identical.
+`robot/arm/base.py` lines the arm up with a server: `Base(m, d).go_to(rack, u)` stands the arm 0.5 m to the right of that tray (so a fully extended tray slides past it) with its shoulder 20 cm above the handles. From there one arm posture can pull a tray all the way out; level with the handle it only manages about 24 cm. It refuses to move while a tray is open or a part is held, folds the arm first, and stops in place on any contact (reported as `BLOCKED`). Same calls, same motion: the tests check that two runs are bit-identical.
+
+`robot/arm/arm.py` moves the hand: `move_free` (joint-space, path checked for collisions first), `move_linear` (straight line), and `guarded_move` (slow straight line that stops when the surface pushes back past a force limit). The force at the fingertips is read from the joint torques, the way the real Panda senses it, and matches the simulator's contact force. Arm poses come from a fixed list of starting postures, keeping the one furthest from the joint limits, so they are repeatable. A posture is only chosen if every straight move that follows it can be done without changing posture.
+
+`robot/arm/skills.py` opens and closes trays with the arm: `TrayService(base, arm).open_tray(rack, u)` lines up, opens the fingers to 26 mm (the handle is 14 mm, the rack wall 45 mm away), plans one posture for reach, grip, 70 cm pull and back-off (collision-checked with the tray moving), grips the right handle and pulls. More than 30 N of resistance, or the handle slipping in the grip, is a jam: it pushes the tray back, lets go and reports `JAMMED`. `close_tray` grips the extended handle and pushes until the closed stop pushes back, then folds the arm.
+
+To make that physically possible the scene uses MuJoCo's elliptic friction cone with `impratio=10` (its recommended setting against grasp slip), the gripper's "closed" aims 10 mm past shut so it squeezes a held handle at about 70 N like the real Franka (the stock model squeezes about 1 N), and handle contacts are stiff so the fingers don't sink in.
 
 ```sh
-.venv-mujoco/bin/python -m pytest robot/arm -q
+.venv-mujoco/bin/python -m pytest robot/arm -q     # ~5 min
+.venv-mujoco/bin/mjpython robot/arm/demo.py        # watch it live (Windows: .venv-mujoco/Scripts/python)
 ```
 
 The viewer keys above do not drive the base; it holds its home position. There is no Gemini, π0.5, training or remote GPU inference in the sim.

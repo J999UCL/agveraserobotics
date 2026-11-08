@@ -22,7 +22,9 @@ RAIL_Y=-.90              # rail centreline, in front of the rack fronts at y=-.4
 RAIL_RANGE=(-1.5,1.5)    # carriage travel along the aisle
 HOME_X=1.46              # parked beside rack 4, clear of every tray
 LIFT_LOW=.22             # arm base height with the lift fully down
-LIFT_TRAVEL=1.30         # lift stroke: arm base from .22 to 1.52 m
+LIFT_TRAVEL=1.55         # lift stroke: arm base from .22 to 1.77 m
+GRIP_KP=4000             # gripper servo, N/m
+GRIP_PAST=.01            # 'closed' aims 10 mm past shut, so a held 14 mm handle gets ~45 N (real Franka: up to 70 N)
 BASE_KP=20000            # rail / lift servo stiffness, N/m
 RAIL_KV=2200             # ~critical damping for the ~60 kg carriage
 LIFT_KV=1400             # ~critical damping for the ~25 kg lift and arm
@@ -41,7 +43,8 @@ def label(text, name):
 
 root=ET.Element('mujoco',model='Agverase data centre')
 add(root,'compiler',angle='radian',autolimits='true')
-add(root,'option',timestep='0.002',integrator='implicitfast')
+# Elliptic friction cone + high impratio: MuJoCo's recommended setting against grasp slip.
+add(root,'option',timestep='0.002',integrator='implicitfast',cone='elliptic',impratio='10')
 visual=add(root,'visual')
 add(visual,'global',offwidth='1600',offheight='1200')
 add(visual,'quality',shadowsize='4096',offsamples='4')
@@ -123,10 +126,11 @@ for y in [RAIL_Y-.12,RAIL_Y+.12]:
     box(world,f'floor_rail_{y:.2f}',f'0 {y} .006','1.75 .018 .006','metal',contype='0',conaffinity='0')
 cart=add(world,'body',name='service_cart',pos=f'0 {RAIL_Y} 0')
 add(cart,'joint',name='rail_x',type='slide',axis='1 0 0',range=f'{RAIL_RANGE[0]} {RAIL_RANGE[1]}',damping='150')
-# Footprint runs from 0.18 m on the tray side to 0.34 m on the mast side of the arm base.
-box(cart,'cart_body','.08 0 .105','.26 .2 .075','yellow')
-box(cart,'cart_status','.08 -.202 .12','.16 .004 .02','cyan',contype='0',conaffinity='0')
-box(cart,'lift_mast','.30 0 1.0','.035 .07 .87','graphite')
+# Footprint runs from 0.12 m on the tray side to 0.34 m on the mast side of the arm base
+# (narrower on the tray side so the hand clears it when pulling the lowest trays).
+box(cart,'cart_body','.11 0 .105','.23 .2 .075','yellow')
+box(cart,'cart_status','.11 -.202 .12','.16 .004 .02','cyan',contype='0',conaffinity='0')
+box(cart,'lift_mast','.30 0 1.125','.035 .07 .995','graphite')
 lift=add(cart,'body',name='service_lift',pos=f'0 0 {LIFT_LOW}')
 add(lift,'joint',name='lift_z',type='slide',axis='0 0 1',range=f'0 {LIFT_TRAVEL}',damping='150')
 box(lift,'lift_platform','.12 0 -.012','.15 .13 .012','metal')
@@ -152,6 +156,10 @@ add(act,'general',name='rail_x',joint='rail_x',biastype='affine',gainprm=BASE_KP
 lift_act=add(act,'general',name='lift_z',joint='lift_z',biastype='affine',gainprm=BASE_KP,biasprm=f'0 -{BASE_KP} -{LIFT_KV}',ctrlrange=f'0 {LIFT_TRAVEL}')
 # Home: base parked beside the right-hand rack, arm folded in its travel pose.
 TUCK='0 -1.0 0 -3.0 0 2.1 .7853'
+# The stock Panda gripper squeezes ~1 N on a thin handle: too weak to drag a tray.
+for a in root.iter('general'):
+    if a.get('name')=='actuator8':
+        a.set('gainprm',f'{GRIP_KP*(.04+GRIP_PAST)/255:.6f} 0 0');a.set('biasprm',f'{-GRIP_KP*GRIP_PAST:g} -{GRIP_KP} -{GRIP_KP//100}')
 keys=add(root,'keyframe')
 add(keys,'key',name='home',qpos=('0 '*(4*COUNT))+f'{HOME_X} 0 {TUCK} .04 .04',ctrl=f'{TUCK} 255 {HOME_X} 0')
 # Camera axes computed from a look-at target, in world coordinates.

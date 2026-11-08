@@ -5,7 +5,9 @@ carriage (up/down). go_to(rack, u) lines the arm up with one server:
 
   * rail target  = the server's rack x + SIDE_OFFSET, so the arm stands beside the tray
                    and a fully extended tray slides past it instead of into it
-  * lift target  = arm shoulder level with the tray's front handles (clamped to the stroke)
+  * lift target  = arm shoulder SHOULDER_ABOVE over the tray's handles (clamped to the stroke),
+                   so the arm reaches down: from there one arm posture can pull the tray
+                   all the way out (level with the handle it only manages ~24 cm)
 
 Targets come from the loaded model's geometry, the motion is a fixed-speed minimum-jerk
 profile, and nothing is random: the same calls on the same scene give the same motion.
@@ -33,7 +35,7 @@ N_RACKS = 4
 SLOTS_PER_RACK = 20
 SIDE_OFFSET = 0.50     # arm base stands this far to the +x side of the tray centre
 SHOULDER = 0.333       # Panda shoulder (joint 2) height above its base
-HANDLE_Z = 0.04        # handle centre above the tray body origin
+SHOULDER_ABOVE = 0.20  # shoulder this far above the handle
 RAIL_SPEED = 0.5       # m/s peak, tune later
 LIFT_SPEED = 0.3       # m/s peak, tune later
 ARM_SPEED = 1.0        # rad/s peak while folding into the travel pose
@@ -82,6 +84,9 @@ class Base:
         self.base0 = d.body("link0").xpos - [self.rail_q, 0.0, self.lift_q]
         cart = m.body("service_cart").id
         self.robot_bodies = {b for b in range(m.nbody) if self._under(b, cart)}
+        self.carriage = {m.body(n).id for n in ("service_cart", "service_lift", "robot_mount")}
+        self.reaching = {m.body(n).id for n in ("link2", "link3", "link4", "link5", "link6",
+                                                 "link7", "hand", "left_finger", "right_finger")}
         self.trays = [m.joint(j).name for j in range(m.njnt)
                       if m.joint(j).name.endswith("_slide")]
 
@@ -111,21 +116,33 @@ class Base:
         right = m.geom_pos[m.geom(f"{name}_handle_1").id]
         handle = tray_origin + (left + right) / 2
         rail = float(np.clip(tray_origin[0] + SIDE_OFFSET - self.base0[0], self.rail_lo, self.rail_hi))
-        lift = float(np.clip(handle[2] - SHOULDER - self.base0[2], self.lift_lo, self.lift_hi))
+        lift = float(np.clip(handle[2] + SHOULDER_ABOVE - SHOULDER - self.base0[2], self.lift_lo, self.lift_hi))
         return Target(rail, lift, handle)
 
     # -------------------------------------------------------------- checks
     def open_trays(self) -> list[str]:
         return [j for j in self.trays if self.d.joint(j).qpos[0] > TRAY_OPEN]
 
-    def external_contact(self) -> str | None:
-        """First contact between the robot and anything that is not the robot."""
-        for i in range(self.d.ncon):
-            c = self.d.contact[i]
-            b1, b2 = int(self.m.geom_bodyid[c.geom1]), int(self.m.geom_bodyid[c.geom2])
-            if (b1 in self.robot_bodies) != (b2 in self.robot_bodies):
-                inside, other = (b1, c.geom2) if b1 in self.robot_bodies else (b2, c.geom1)
-                return f"{self.m.body(inside).name} touched {self.m.geom(other).name or self.m.body(int(self.m.geom_bodyid[other])).name}"
+    def contact_problem(self, d: mujoco.MjData, i: int) -> str | None:
+        """Contact i as a problem: the robot touching the world, or the reaching part of
+        the arm touching the robot's own carriage or lift. None if it is neither."""
+        c = d.contact[i]
+        b1, b2 = int(self.m.geom_bodyid[c.geom1]), int(self.m.geom_bodyid[c.geom2])
+        if (b1 in self.robot_bodies) != (b2 in self.robot_bodies):
+            inside, other = (b1, c.geom2) if b1 in self.robot_bodies else (b2, c.geom1)
+            return f"{self.m.body(inside).name} touched {self.m.geom(other).name or self.m.body(int(self.m.geom_bodyid[other])).name}"
+        for a, b, g in ((b1, b2, c.geom2), (b2, b1, c.geom1)):
+            if a in self.reaching and b in self.carriage:
+                return f"{self.m.body(a).name} touched the robot's own {self.m.geom(g).name or self.m.body(b).name}"
+        return None
+
+    def external_contact(self, d: mujoco.MjData | None = None) -> str | None:
+        """First contact between the robot and the world, or the arm and its own carriage."""
+        d = d or self.d
+        for i in range(d.ncon):
+            problem = self.contact_problem(d, i)
+            if problem:
+                return problem
         return None
 
     def refusal(self) -> str | None:
