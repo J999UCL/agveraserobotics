@@ -1,12 +1,19 @@
-"""MCP server exposing the data-center robot sim as agent tools.
+"""MCP server exposing the data-center maintenance robot (MuJoCo sim) as agent tools.
 
     pip install -r requirements-client.txt
     DCSIM=host:port python mcp_server.py           (default localhost:5555)
 
-Typical agent loop: get_server_health -> decide what is faulty -> pull_tray_out ->
-capture_image("wrist") to confirm the amber LED -> swap(slot) -> get_server_health to
-verify -> push_tray_in. Lower-level tools (pick/place/discard/move_tcp) exist for
-custom sequences, e.g. removing a part without replacing it.
+The robot is a mobile manipulator in a data-center aisle (rows R1 and R2, racks 01-06) with
+4 serviceable 2U servers (ids like "R1-05-U20"). Each server tray holds 8 RAM sticks
+(slots A1-A8) and 5 fan modules (F1-F5). The robot carries spares on board (CD1-CD4 RAM,
+CF1-CF2 fans) and a returns bin; its dock is at the spares depot.
+
+Typical agent loop:
+  get_work_orders / get_fleet_health -> pick a server -> go_to(server) -> pull_tray_out ->
+  view_tray + capture_image("wrist") to confirm the amber LED -> swap(slot) ->
+  get_server_health to verify -> push_tray_in -> next server ... -> go_home -> restock.
+Safety reflexes (force abort on stuck parts, stopping for obstacles) run inside the robot;
+tool results report them.
 """
 
 from __future__ import annotations
@@ -52,68 +59,100 @@ def quick_client() -> SimClient:
 
 # ----------------------------------------------------------------- diagnostics
 @mcp.tool()
-def get_server_health() -> dict:
-    """BMC-style health report: overall status, per-DIMM (slots A1-A8: ECC counts, status) and
-    per-fan (slots F1-F5: rpm, status) readings, CPU temperatures, usable memory, tray position."""
-    return quick_client().get_server_health()
+def get_work_orders(status: str | None = None) -> list[dict]:
+    """Maintenance tickets opened by monitoring: server, rack, U, slot, component, fault, severity,
+    status (open / in_progress / resolved). Filter with status="open"."""
+    return quick_client().get_work_orders(status)
 
 
 @mcp.tool()
-def get_event_log() -> list[dict]:
-    """The server's system event log (faults, part removed/inserted, verification results)."""
-    return quick_client().get_event_log()
+def get_fleet_health() -> list[dict]:
+    """One line per serviceable server: id, rack, U, overall health, problem slots, CPU temps."""
+    return quick_client().get_fleet_health()
 
 
 @mcp.tool()
-def get_cart_inventory() -> dict:
-    """Spare parts on the robot's cart: slots CD1-CD4 (DIMMs) and CF1-CF2 (fans) -> part id or null."""
-    return quick_client().get_cart_inventory()
+def get_server_health(server: str) -> dict:
+    """Full BMC-style report for one server: per-DIMM (A1-A8: ECC counts, status), per-fan
+    (F1-F5: rpm, status), CPU temperatures, usable memory, tray position."""
+    return quick_client().get_server_health(server)
+
+
+@mcp.tool()
+def get_event_log(server: str) -> list[dict]:
+    """A server's system event log: faults, parts removed/inserted, verification, aborted pulls."""
+    return quick_client().get_event_log(server)
 
 
 @mcp.tool()
 def get_status() -> dict:
-    """Robot state: gripper position, what it is holding, pull force, tray extension."""
+    """Robot state: base position/heading/lift, current server, what it holds, onboard spares, trays."""
     return quick_client().get_status()
 
 
 @mcp.tool()
+def get_inventory() -> dict:
+    """Spare parts on the robot (CD*/CF*) and on the depot shelf (DD*/DF*)."""
+    c = quick_client()
+    return {"onboard": c.get_onboard_inventory(), "depot": c.get_depot_inventory()}
+
+
+@mcp.tool()
 def capture_image(camera: str = "wrist") -> Image:
-    """Camera image. "wrist": on the gripper (after view_tray it looks down on the fans and RAM; faulty
-    parts have an amber LED). "overview": third-person view. "tray_top": fixed top-down view of the tray."""
+    """Camera image. "wrist": on the gripper (after view_tray it looks down on the fans and RAM;
+    faulty parts show an amber LED). "follow": behind the robot. "overview", "aisle_end": room views."""
     r = quick_client().call("capture_image", camera=camera)
     return Image(data=base64.b64decode(r["jpeg_b64"]), format="jpeg")
+
+
+# ------------------------------------------------------------------ navigation
+@mcp.tool()
+def go_to(server: str) -> dict:
+    """Drive to a server's rack (e.g. "R1-05-U20"), face it and raise the arm to its height."""
+    return main_client().go_to(server)
+
+
+@mcp.tool()
+def go_home() -> dict:
+    """Drive back to the dock at the spares depot."""
+    return main_client().go_home()
+
+
+@mcp.tool()
+def restock() -> dict:
+    """At the dock: refill the robot's empty spare slots from the depot shelf."""
+    return main_client().restock()
 
 
 # --------------------------------------------------------------------- skills
 @mcp.tool()
 def pull_tray_out() -> dict:
-    """Grab the server tray's handle and slide it out on its rails to the service position."""
+    """Slide the current server's tray out of the rack to the service position."""
     return main_client().pull_tray_out()
 
 
 @mcp.tool()
 def push_tray_in() -> dict:
-    """Slide the tray back into the rack and return the arm home."""
+    """Slide the current server's tray back into the rack."""
     return main_client().push_tray_in()
 
 
 @mcp.tool()
 def view_tray() -> dict:
-    """Position the wrist camera above the open tray (then call capture_image("wrist"))."""
+    """Hold the wrist camera above the open tray (then call capture_image("wrist"))."""
     return main_client().view_tray()
 
 
 @mcp.tool()
 def swap(slot: str) -> dict:
-    """Full hot-swap of the part in a tray slot (A1-A8 RAM, F1-F5 fans): pull it, drop it in the
-    used-parts bin, take a matching spare from the cart, install it. Aborts safely if the part is stuck."""
+    """Hot-swap the part in a slot of the current server (A1-A8 RAM, F1-F5 fans): pull it, drop it in
+    the returns bin, install a matching onboard spare. Aborts safely if the part is stuck."""
     return main_client().swap(slot)
 
 
 @mcp.tool()
 def pick(slot: str) -> dict:
-    """Grasp and lift the part in a tray slot (A1-A8, F1-F5) or cart slot (CD1-CD4, CF1-CF2).
-    Watches the extraction force and aborts if the part is stuck."""
+    """Grasp and lift the part in a slot: A1-A8/F1-F5 (current server), CD1-CF2 (onboard), DD1-DF3 (depot)."""
     return main_client().pick(slot)
 
 
@@ -125,7 +164,7 @@ def place(slot: str) -> dict:
 
 @mcp.tool()
 def discard() -> dict:
-    """Drop the held part into the used-parts bin on the cart."""
+    """Drop the held part into the robot's returns bin."""
     return main_client().discard()
 
 
@@ -141,42 +180,23 @@ def stop() -> dict:
     return quick_client().stop()
 
 
-# ------------------------------------------------------------------ low level
-@mcp.tool()
-def move_tcp(x: float, y: float, z: float, orientation: str = "fingers_y") -> dict:
-    """Move the gripper tip to x, y, z (meters, robot frame: +X toward the rack, +Y left, +Z up),
-    pointing down. orientation: "fingers_y" (fingers close along Y) or "fingers_x"."""
-    return main_client().move_tcp(x, y, z, orientation)
-
-
-@mcp.tool()
-def open_gripper() -> dict:
-    """Open the gripper (drops whatever it holds; seats it if it is lined up with a slot)."""
-    return main_client().open_gripper()
-
-
-@mcp.tool()
-def close_gripper() -> dict:
-    """Close the gripper; reports which part (if any) it is now holding."""
-    return main_client().close_gripper()
-
-
 # ---------------------------------------------------------------- demo controls
 @mcp.tool()
-def inject_fault(slot: str, fault: str) -> dict:
-    """DEMO: make the part in `slot` fail. fault: dimm_uncorrectable | dimm_correctable | fan_failed | fan_degraded."""
-    return quick_client().inject_fault(slot, fault)
+def inject_fault(server: str, slot: str, fault: str) -> dict:
+    """DEMO: make a part fail (opens a work order). fault: dimm_uncorrectable | dimm_correctable |
+    fan_failed | fan_degraded."""
+    return quick_client().inject_fault(server, slot, fault)
 
 
 @mcp.tool()
-def set_jam(slot: str, on: bool = True) -> dict:
-    """DEMO: make the part in `slot` mechanically stuck (pulling it builds force until the robot aborts)."""
-    return quick_client().set_jam(slot, on)
+def set_jam(server: str, slot: str, on: bool = True) -> dict:
+    """DEMO: make a part mechanically stuck (pulling it builds force until the robot aborts)."""
+    return quick_client().set_jam(slot, server, on)
 
 
 @mcp.tool()
 def reset(seed: int | None = None) -> dict:
-    """DEMO: reset the scene. Default faults are A3 (RAM) and F2 (fan); a seed randomizes them."""
+    """DEMO: reset the whole data center. A seed randomizes which parts are faulty."""
     return main_client().reset(seed)
 
 

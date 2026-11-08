@@ -152,6 +152,7 @@ class DataCenterSim:
         self._last_force = self._peak_force = 0.0
         self._tick = 0
         self.events: list[dict] = []
+        self.work_orders: list[dict] = []
         if seed is not None:
             r = np.random.default_rng(seed)
             sids = list(self.layout.servers)
@@ -170,8 +171,14 @@ class DataCenterSim:
             raise ValueError(f"{server}:{slot} is empty")
         h = self.health[server]
         h.inject(pid, fault)
-        h.log("critical" if ("failed" in fault or "uncorrectable" in fault) else "warning",
-              f"{slot}: {h.parts[pid].fault_note}", slot=slot, part=pid)
+        severity = "critical" if ("failed" in fault or "uncorrectable" in fault) else "warning"
+        h.log(severity, f"{slot}: {h.parts[pid].fault_note}", slot=slot, part=pid)
+        sv = self.layout.servers[server]
+        self.work_orders.append({
+            "id": f"WO-{len(self.work_orders) + 1:03d}", "server": server, "rack": f"R{sv.row}-{sv.rack:02d}", "u": sv.u,
+            "slot": slot, "component": "RAM (DIMM)" if slot.startswith("A") else "fan module", "fault": fault,
+            "severity": severity, "detail": h.parts[pid].fault_note, "status": "open",
+            "opened_t": round(self.time, 1), "resolved_t": None})
 
     # ================================================================== time
     @property
@@ -680,6 +687,21 @@ class DataCenterSim:
                 self._log_event(server=sid, **ev)
         if self._tick % 10 == 0:
             self._refresh_leds()
+        if self._tick % 25 == 0:
+            self._update_work_orders()
+
+    def _update_work_orders(self) -> None:
+        """Tickets go open -> in_progress (robot at that server) -> resolved (new part verified OK)."""
+        for wo in self.work_orders:
+            if wo["status"] == "resolved":
+                continue
+            pid = self.installed(wo["server"])[wo["slot"]]
+            ph = self.health[wo["server"]].parts.get(pid) if pid else None
+            if ph is not None and ph.status == "ok" and ph.pending_post <= 0:
+                wo["status"], wo["resolved_t"] = "resolved", round(self.time, 1)
+                self._log_event("work_order_resolved", id=wo["id"], server=wo["server"], slot=wo["slot"])
+            elif self.active_server == wo["server"] and wo["status"] == "open":
+                wo["status"] = "in_progress"
 
     def _log_event(self, event: str, **kw) -> None:
         self.events.append({"t": round(self.time, 2), "event": event, **kw})

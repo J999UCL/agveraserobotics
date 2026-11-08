@@ -2,12 +2,14 @@
 
     from dcsim_client import SimClient
     sim = SimClient("localhost", 5555)
-    health = sim.get_server_health()          # what's broken, per DIMM / fan
+    sim.get_fleet_health()                    # which servers have problems, and where
+    sim.go_to("R1-05-U20")                    # drive there, face the rack, lift to height
     sim.pull_tray_out()
     img = sim.capture_image("wrist")          # numpy RGB
-    sim.swap("A3")                            # pull failed DIMM, bin it, install a spare
+    sim.swap("A3")                            # pull the failed DIMM, bin it, install an onboard spare
+    sim.push_tray_in(); sim.go_home(); sim.restock()
 
-Positions are in the robot base frame (+X toward the rack, +Y left, +Z up, meters).
+Slots are short names at the current server (A3, F2); onboard spares are CD1/CF1.
 Skills block until done. A second SimClient can still call stop(), get_status(),
 get_pull_force(), capture_image() while one runs.
 """
@@ -61,12 +63,15 @@ class SimClient:
         self.sock.close()
 
     # diagnostics ----------------------------------------------------------
-    def get_server_health(self) -> dict: return self.call("get_server_health")
-    def get_event_log(self) -> list[dict]: return self.call("get_event_log")
+    def get_fleet_health(self) -> list[dict]: return self.call("get_fleet_health")
+    def get_server_health(self, server: str | None = None) -> dict: return self.call("get_server_health", server=server)
+    def get_event_log(self, server: str) -> list[dict]: return self.call("get_event_log", server=server)
+    def get_work_orders(self, status: str | None = None) -> list[dict]: return self.call("get_work_orders", status=status)
     def get_events(self, since: float = 0.0) -> list[dict]: return self.call("get_events", since=since)
-    def get_installed(self) -> dict: return self.call("get_installed")
-    def get_cart_inventory(self) -> dict: return self.call("get_cart_inventory")
-    def list_slots(self) -> dict: return self.call("list_slots")
+    def get_installed(self, server: str | None = None) -> dict: return self.call("get_installed", server=server)
+    def get_onboard_inventory(self) -> dict: return self.call("get_onboard_inventory")
+    def get_depot_inventory(self) -> dict: return self.call("get_depot_inventory")
+    def list_servers(self) -> list[dict]: return self.call("list_servers")
 
     # status ---------------------------------------------------------------
     def ping(self) -> str: return self.call("ping")
@@ -75,7 +80,12 @@ class SimClient:
     def stop(self) -> dict: return self.call("stop")
     def step(self, n: int = 1) -> dict: return self.call("step", n=n)
 
-    # skills -----------------------------------------------------------------
+    # navigation -------------------------------------------------------------
+    def go_to(self, server: str) -> dict: return self.call("go_to", server=server)
+    def go_home(self) -> dict: return self.call("go_home")
+    def restock(self) -> dict: return self.call("restock")
+
+    # skills (at the current server) ------------------------------------------
     def pull_tray_out(self) -> dict: return self.call("pull_tray_out")
     def push_tray_in(self) -> dict: return self.call("push_tray_in")
     def view_tray(self) -> dict: return self.call("view_tray")
@@ -86,7 +96,8 @@ class SimClient:
     def home(self) -> dict: return self.call("home")
 
     # low level --------------------------------------------------------------
-    def move_tcp(self, x: float, y: float, z: float, orientation: str = "fingers_y", speed: float = 0.2) -> dict:
+    def move_tcp(self, x: float, y: float, z: float, orientation: str = "down", speed: float = 0.2) -> dict:
+        """Gripper tip to (x, y, z) in the ROBOT frame (relative to the arm base, +X forward, +Z up)."""
         return self.call("move_tcp", x=x, y=y, z=z, orientation=orientation, speed=speed)
 
     def open_gripper(self) -> dict: return self.call("open_gripper")
@@ -94,7 +105,7 @@ class SimClient:
 
     # cameras ----------------------------------------------------------------
     def capture_image(self, camera: str = "wrist") -> np.ndarray:
-        """camera: "wrist" (640x480, on the gripper), "overview" or "tray_top" (1280x720)."""
+        """camera: "wrist" (640x480, on the gripper), "follow" (behind the robot), "overview", "aisle_end"."""
         return _img(self.call("capture_image", camera=camera)["jpeg_b64"])
 
     def capture_rgbd(self, camera: str = "wrist") -> dict:
@@ -108,6 +119,10 @@ class SimClient:
         return self.call("pixel_to_world", u=u, v=v, depth=depth, camera=camera)
 
     # demo controls ----------------------------------------------------------
-    def set_jam(self, slot: str, on: bool = True) -> dict: return self.call("set_jam", slot=slot, on=on)
-    def inject_fault(self, slot: str, fault: str) -> dict: return self.call("inject_fault", slot=slot, fault=fault)
+    def set_jam(self, slot: str, server: str | None = None, on: bool = True) -> dict:
+        return self.call("set_jam", slot=slot, server=server, on=on)
+
+    def inject_fault(self, server: str, slot: str, fault: str) -> dict:
+        return self.call("inject_fault", server=server, slot=slot, fault=fault)
+
     def reset(self, seed: int | None = None) -> dict: return self.call("reset", seed=seed)
