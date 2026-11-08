@@ -26,9 +26,19 @@ Each server has a full-depth 760 mm chassis, drive carriers and eight drives, si
 
 The selected server has cyan handles; its rack and U positions print in the terminal. Rack numbering runs left to right, U numbering bottom to top. Left-drag orbits, right-drag pans, scroll zooms. Tab shows the native viewer controls. Close the window to stop.
 
-Each rail is a bounded 0–720 mm MuJoCo slide joint with damping, friction and a 12 kg assembly mass. `O`/`C` apply a bounded 100 N service force with position/velocity feedback; this is a manual viewer aid. The robot holds its initial pose and is not being controlled to perform extraction. Robot/cart obstructions can physically block a tray; the rail controller does not teleport through them. `M` removes the service aid from the selected tray for later robot interaction.
+Each rail is a bounded 0–720 mm MuJoCo slide joint with damping, friction and a 12 kg assembly mass. `O`/`C` apply a bounded 100 N service force with position/velocity feedback; this is a manual viewer aid. The arm is not yet controlled to perform extraction. Robot/cart obstructions can physically block a tray; the rail controller does not teleport through them. `M` removes the service aid from the selected tray for later robot interaction.
 
-The arm and cart stay parked. There is no Gemini, π0.5, training or remote GPU inference.
+## Service base: rail and lift
+
+The Panda sits on a lift (up/down, 1.3 m stroke) on a carriage that runs on a floor rail along the aisle (left/right, x from −1.5 to 1.5 m, 0.43 m in front of the rack fronts). Both are position-servoed slide joints; the lift's servo cancels the weight it carries. At home the base is parked beside rack 4 with the arm folded, clear of every tray.
+
+`robot/arm/base.py` lines the arm up with a server: `Base(m, d).go_to(rack, u)` stands the arm 0.5 m to the right of that tray (so a fully extended tray slides past it) with its shoulder level with the handles. It refuses to move while a tray is open or a part is held, folds the arm first, and stops in place on any contact (reported as `BLOCKED`). Same calls, same motion: the tests check that two runs are bit-identical.
+
+```sh
+.venv-mujoco/bin/python -m pytest robot/arm -q
+```
+
+The viewer keys above do not drive the base; it holds its home position. There is no Gemini, π0.5, training or remote GPU inference in the sim.
 
 ## Setup and regeneration
 
@@ -50,7 +60,7 @@ On macOS the passive viewer uses `mjpython`; `view.sh` also supplies the shared-
 .venv-mujoco/bin/python sim/run.py --showcase --camera hardware --render sim/previews/hardware.png
 ```
 
-The check advances ten seconds at home and then extends every rail to 700 mm and closes it under force, checking position error and MuJoCo warnings. Arm/cart contacts are temporarily disabled only during the all-rail clearance check, because the parked cart blocks some lower servers. Normal simulation and showcase rendering retain these contacts. Detailed hardware meshes are visual; tray shell/handle colliders and separate rack frame colliders provide contact. Adjacent trays use collision masks to avoid redundant checks, and the one-axis joints keep them on distinct rail levels.
+The check advances ten seconds at home and then extends every rail to 700 mm and closes it under force, checking position error and MuJoCo warnings. Arm/cart contacts are temporarily disabled only during the all-rail clearance check, so the check covers rack clearance independently of where the base is. Normal simulation and showcase rendering retain these contacts. Detailed hardware meshes are visual; tray shell/handle colliders and separate rack frame colliders provide contact. Adjacent trays use collision masks to avoid redundant checks, and the one-axis joints keep them on distinct rail levels.
 
 Collision proxies are in group 3, hidden by default. Enable that group in the viewer to inspect them. The Panda keeps its supplied collision meshes and gripper contacts.
 

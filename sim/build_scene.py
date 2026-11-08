@@ -17,11 +17,26 @@ def add(parent, tag, **attrs):
 def box(parent, name, pos, size, material, **kw):
     return add(parent, 'geom', name=name, type='box', pos=pos, size=size, material=material, **kw)
 
+# Service base geometry (metres). Shared with robot/arm/base.py through the compiled model.
+RAIL_Y=-.90              # rail centreline, in front of the rack fronts at y=-.47
+RAIL_RANGE=(-1.5,1.5)    # carriage travel along the aisle
+HOME_X=1.46              # parked beside rack 4, clear of every tray
+LIFT_LOW=.22             # arm base height with the lift fully down
+LIFT_TRAVEL=1.30         # lift stroke: arm base from .22 to 1.52 m
+BASE_KP=20000            # rail / lift servo stiffness, N/m
+RAIL_KV=2200             # ~critical damping for the ~60 kg carriage
+LIFT_KV=1400             # ~critical damping for the ~25 kg lift and arm
+
+def font(size):
+    for path in ['/System/Library/Fonts/Helvetica.ttc','C:/Windows/Fonts/arial.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']:
+        if Path(path).exists():return ImageFont.truetype(path,size)
+    return ImageFont.load_default(size)
+
 def label(text, name):
     im=Image.new('RGB',(512,128),'#15212e'); d=ImageDraw.Draw(im)
-    font=ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc',48)
+    font_=font(48)
     d.rectangle((0,0,12,128),fill='#46cfdd')
-    d.text((36,34),text,font=font,fill='#e4f4f6')
+    d.text((36,34),text,font=font_,fill='#e4f4f6')
     im.save(OUT / f'{name}.png')
 
 root=ET.Element('mujoco',model='Agverase data centre')
@@ -100,19 +115,22 @@ for rack_i,x in enumerate([-.96,-.32,.32,.96]):
     add(assets,'material',name=name,texture=name,texuniform='false')
     box(rack,name,'0 -.476 1.935','.245 .004 .055',name,contype='0',conaffinity='0')
 
-# Fixed service cart: a mounting platform, not a mobile-base controller.
-cart=add(world,'body',name='service_cart',pos='-.32 -1.27 0')
-box(cart,'cart_body','0 0 .245','.32 .38 .135','yellow')
-box(cart,'cart_top','0 0 .393','.34 .4 .018','graphite')
-box(cart,'cart_bumper','0 0 .105','.34 .4 .025','rubber')
-for x in [-.265,.265]:
-    for y in [-.27,.27]:
-        add(cart,'geom',name=f'wheel_{x}_{y}',type='cylinder',pos=f'{x} {y} .09',size='.085 .035',euler='0 1.5708 0',material='rubber')
-for x in [-.29,.29]:
-    box(cart,f'handle_post_{x}',f'{x} -.34 .59','.012 .012 .18','metal')
-box(cart,'handle_bar','0 -.34 .77','.3 .014 .014','metal')
-box(cart,'cart_status','0 -.382 .25','.2 .004 .025','cyan',contype='0',conaffinity='0')
-robot_mount=add(cart,'body',name='robot_mount',pos='0 .06 .412',euler='0 0 1.57079632679')
+# Service base: a carriage on a floor rail along the aisle (left/right) carrying a lift
+# (up/down) with the Panda on top. Both are position-servoed slide joints; robot/arm/base.py
+# computes their targets from rack and shelf positions. The rail sits far enough back that
+# the tucked arm clears the rack fronts (y = -.47) while it travels.
+for y in [RAIL_Y-.12,RAIL_Y+.12]:
+    box(world,f'floor_rail_{y:.2f}',f'0 {y} .006','1.75 .018 .006','metal',contype='0',conaffinity='0')
+cart=add(world,'body',name='service_cart',pos=f'0 {RAIL_Y} 0')
+add(cart,'joint',name='rail_x',type='slide',axis='1 0 0',range=f'{RAIL_RANGE[0]} {RAIL_RANGE[1]}',damping='150')
+# Footprint runs from 0.18 m on the tray side to 0.34 m on the mast side of the arm base.
+box(cart,'cart_body','.08 0 .105','.26 .2 .075','yellow')
+box(cart,'cart_status','.08 -.202 .12','.16 .004 .02','cyan',contype='0',conaffinity='0')
+box(cart,'lift_mast','.30 0 1.0','.035 .07 .87','graphite')
+lift=add(cart,'body',name='service_lift',pos=f'0 0 {LIFT_LOW}')
+add(lift,'joint',name='lift_z',type='slide',axis='0 0 1',range=f'0 {LIFT_TRAVEL}',damping='150')
+box(lift,'lift_platform','.12 0 -.012','.15 .13 .012','metal')
+robot_mount=add(lift,'body',name='robot_mount',pos='0 0 0',euler='0 0 1.57079632679')
 robot=ET.parse(ROOT/'assets/franka_emika_panda/panda.xml').getroot()
 for child in robot:
     child=copy.deepcopy(child)
@@ -127,8 +145,15 @@ for child in robot:
     elif child.tag=='worldbody':
         for item in child: robot_mount.append(item)
     else: root.append(child)
+# Rail and lift servos. The lift's constant bias cancels the weight it carries
+# (filled in after a first compile below), so it holds height without sagging.
+act=add(root,'actuator')
+add(act,'general',name='rail_x',joint='rail_x',biastype='affine',gainprm=BASE_KP,biasprm=f'0 -{BASE_KP} -{RAIL_KV}',ctrlrange=f'{RAIL_RANGE[0]} {RAIL_RANGE[1]}',forcerange='-800 800')
+lift_act=add(act,'general',name='lift_z',joint='lift_z',biastype='affine',gainprm=BASE_KP,biasprm=f'0 -{BASE_KP} -{LIFT_KV}',ctrlrange=f'0 {LIFT_TRAVEL}')
+# Home: base parked beside the right-hand rack, arm folded in its travel pose.
+TUCK='0 -1.0 0 -3.0 0 2.1 .7853'
 keys=add(root,'keyframe')
-add(keys,'key',name='home',qpos=('0 '*(4*COUNT))+'0 0 0 -1.57079 0 1.57079 -.7853 .04 .04',ctrl='0 0 0 -1.57079 0 1.57079 -.7853 255')
+add(keys,'key',name='home',qpos=('0 '*(4*COUNT))+f'{HOME_X} 0 {TUCK} .04 .04',ctrl=f'{TUCK} 255 {HOME_X} 0')
 # Camera axes computed from a look-at target, in world coordinates.
 def camera(name,pos,target,fovy):
     z=np.array(pos)-target; z=z/np.linalg.norm(z)
@@ -140,4 +165,10 @@ camera('service',[-1.55,-2.5,1.9],np.array([-.32,-.25,1.0]),'47')
 camera('hardware',[2.0,-2.4,2.15],np.array([.96,-.75,1.0]),'42')
 ET.indent(root)
 ET.ElementTree(root).write(ROOT/'datacentre.xml',encoding='unicode')
-print('Built',ROOT/'datacentre.xml')
+import mujoco
+m=mujoco.MjModel.from_xml_path(str(ROOT/'datacentre.xml'))
+weight=float(m.body_subtreemass[m.body('service_lift').id])*-float(m.opt.gravity[2])
+lift_act.set('biasprm',f'{weight:.3f} -{BASE_KP} -{LIFT_KV}')
+lift_act.set('forcerange',f'{weight-800:.1f} {weight+800:.1f}')
+ET.ElementTree(root).write(ROOT/'datacentre.xml',encoding='unicode')
+print('Built',ROOT/'datacentre.xml',f'(lift carries {weight:.1f} N)')
