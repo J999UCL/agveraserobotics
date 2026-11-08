@@ -8,7 +8,7 @@ Split of responsibilities (this is what the write-up describes):
   * Argon            - called only when the autopilot escalates: conflicting evidence,
                        jams, failed verification, conditions that don't clear
 
-Brain: Gemini 4 Argon, stateless, one JSON action per call.
+Brain: Gemini 3.5 Flash-Lite, stateless, one JSON action per call.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from world import World
 
-MODEL = "gemini-4-argon"
+MODEL = "gemini-3.5-flash-lite"
 
 SYSTEM = """You are the reasoning brain of a robotic arm that services an unmanned data-centre rack
 (8 drive bays, 0-7). A local autopilot handles routine swaps; when it cannot settle an incident
