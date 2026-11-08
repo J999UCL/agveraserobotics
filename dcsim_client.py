@@ -142,6 +142,17 @@ class SimClient:
 
     def clear_technician(self) -> dict: return self.call("clear_technician")
 
+    def get_slot_grasp_points(self, server: str) -> dict:
+        """World xyz the gripper closes on for each slot (A1-A8, F1-F5): map knowledge for perception."""
+        return self.call("get_slot_grasp_points", server=server)
+
+    def drop_cable(self, server: str, slot: str, height: float = 0.07) -> dict:
+        """Demo: a loose cable lands across the open tray along `slot`, `height` m above the part.
+        Visual only: the wrist camera has to catch it."""
+        return self.call("drop_cable", server=server, slot=slot, height=height)
+
+    def clear_cable(self) -> dict: return self.call("clear_cable")
+
     def reset(self, seed: int | None = None, faults: list | None = None) -> dict:
         """faults: [[server, slot, fault], ...]; [] = a healthy data centre."""
         return self.call("reset", seed=seed, faults=faults)

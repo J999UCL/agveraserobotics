@@ -85,4 +85,7 @@ keeps the details. Touching trays and parts is part of the job and doesn't count
 | `set_led(server, slot, state)` | forces an LED to `green` / `amber` / `red` / `off` / `blue` whatever the part's health (a faulty LED); `None` = automatic. Python client only |
 | `get_slot_leds(server)` | world xyz of each slot's LED, for perception. Python client only |
 | `clear_technician()` | the technician leaves the aisle now. Python client only |
+| `drop_cable(server, slot, height=0.07)` | a loose patch cable lands across the open tray along `slot`, `height` m above the part. Visual only: nothing physical stops the arm, so the wrist camera has to catch it (see `vision/corridor.py`). Python client only |
+| `clear_cable()` | the cable is out of the way again. Python client only |
+| `get_slot_grasp_points(server)` | world xyz the gripper closes on for each slot (map knowledge, like `get_slot_leds`). Python client only |
 | `reset(seed=None, faults=None)` | everything back to the start; a seed randomizes the faults; `faults=[]` gives a healthy data center (Python client) |

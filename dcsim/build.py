@@ -168,6 +168,7 @@ def build_spec(cfg: SimCfg | None = None) -> tuple[mujoco.MjSpec, Layout]:
     depot = depot_pose(cfg)
     _build_depot(spec, cfg, depot, slots)
     _build_technician(spec)
+    _build_loose_cable(spec)
     components = _build_components(spec, cfg, slots, servers, depot)
     return spec, Layout(slots, components, servers, racks, depot)
 
@@ -444,6 +445,15 @@ def _build_depot(spec, cfg: SimCfg, depot, slots) -> None:
         name = f"DF{i + 1}"
         slots[f"depot:{name}"] = SlotDef(name, "fan", "depot", None, np.array([-0.08, y, z + t.fan_size[2] / 2 + 0.002]))
         _box(body, f"depot_pad_{name}", [-0.08, y, z + 0.001], [0.035, 0.045, 0.001], SOCKET, 0, 0)
+
+
+# =========================================================================== loose cable
+def _build_loose_cable(spec) -> None:
+    """A patch cable that can fall across an open tray (static obstacle for the arm), placed by the
+    sim. Visual only: the arm must SEE it with the wrist camera, nothing physical stops it."""
+    b = spec.worldbody.add_body(name="loose_cable", mocap=True, pos=[0, 0, -10])
+    b.add_geom(name="loose_cable", type=mujoco.mjtGeom.mjGEOM_CAPSULE, size=[0.006, 0, 0],
+               fromto=[-0.11, 0, 0, 0.11, 0, 0], rgba=[0.95, 0.85, 0.1, 1], contype=0, conaffinity=0)
 
 
 # =========================================================================== people
