@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .config import SceneCfg
-from .geometry import BoxBatch, look_at_quat
+from .geometry import BoxBatch, ensure_xform, look_at_quat
 
 ROBOT_PATH = "/World/robot"
 HAND_PATH = f"{ROBOT_PATH}/panda_hand"
@@ -34,6 +34,7 @@ CART_DARK = (0.08, 0.08, 0.09)
 def build_cart(cfg: SceneCfg, batch: BoxBatch) -> None:
     c = cfg.cart
     fz = cfg.floor_z
+    ensure_xform("/World/Cart")  # parent Xform so the whole cart can glide along the aisle
     body_h = c.height - c.wheel_radius * 2 - 0.02
     batch.add("/World/Cart/body", (c.center_x, 0, fz + 2 * c.wheel_radius + body_h / 2),
               (c.length, c.width, body_h), CART_BODY)
@@ -79,7 +80,7 @@ def build_cameras(cfg: SceneCfg) -> Cameras:
     wrist.camera.set_clipping_ranges(cc.near, cc.far)
     wrist_sensor = CameraSensor(wrist, resolution=cc.resolution, annotators=["rgb", "distance_to_image_plane"])
 
-    eye, target = np.array([-0.9, -1.5, 1.05]), np.array([0.55, 0.0, 0.45])
+    eye, target = np.array([-1.5, -2.3, 1.25]), np.array([0.55, 0.0, 0.35])
     over = RtxCamera(OVERVIEW_CAM_PATH, positions=eye, orientations=look_at_quat(eye, target))
     over.camera.set_focal_lengths(18.0)
     over.camera.set_apertures(20.955, 20.955 * 720 / 1280)

@@ -78,14 +78,49 @@ class CameraCfg:
 
 
 @dataclass(frozen=True)
+class CaddyPhysicsCfg:
+    """Resistance model for pulling a caddy (applied through a drive on its slide joint)."""
+
+    mass: float = 0.6  # kg, a 3.5" drive in its tray
+    release_at: float = 0.15  # m pulled out -> caddy leaves the slot and is carried freely
+    detent_len: float = 0.010  # m of travel where the backplane connector holds it
+    detent_stiffness: float = 1500.0  # N/m -> ~15 N to unseat a healthy caddy
+    damping: float = 15.0  # N per (m/s) sliding resistance
+    jam_stiffness: float = 20000.0  # N/m -> force climbs ~20 N per mm when jammed
+    breakaway_force: float = 35.0  # N; above this a jammed caddy's connector "breaks".
+    # Healthy pulls peak ~15 N and the gripper slips ~45 N, so abort somewhere around 25 N.
+
+
+@dataclass(frozen=True)
+class AisleCfg:
+    n_cabinets: int = 3
+    start_cabinet: int = 1
+    move_duration: float = 3.0  # s for the cart to glide one cabinet over
+
+
+@dataclass(frozen=True)
 class SceneCfg:
     cart: CartCfg = field(default_factory=CartCfg)
     rack: RackCfg = field(default_factory=RackCfg)
     server: ServerCfg = field(default_factory=ServerCfg)
     caddy: CaddyCfg = field(default_factory=CaddyCfg)
+    caddy_physics: CaddyPhysicsCfg = field(default_factory=CaddyPhysicsCfg)
     camera: CameraCfg = field(default_factory=CameraCfg)
-    faulty_bay: tuple[int, int] = (1, 2)  # (row, col), row 0 = top
+    aisle: AisleCfg = field(default_factory=AisleCfg)
+    faulty: tuple[int, int] = (1, 6)  # (cabinet, bay); bay 6 = middle row, third from left
     physics_dt: float = 1.0 / 60.0
+
+    @property
+    def n_bays(self) -> int:
+        return self.server.bay_rows * self.server.bay_cols
+
+    @property
+    def cabinet_pitch(self) -> float:
+        return self.rack.outer_width + 0.01
+
+    def cabinet_y(self, cabinet: int) -> float:
+        """World Y of a cabinet's center. Cabinet 0 is leftmost as the robot sees it (+Y)."""
+        return ((self.aisle.n_cabinets - 1) / 2 - cabinet) * self.cabinet_pitch
 
     @property
     def floor_z(self) -> float:
