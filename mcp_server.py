@@ -195,6 +195,19 @@ def set_jam(server: str, slot: str, on: bool = True) -> dict:
 
 
 @mcp.tool()
+def spawn_technician(mode: str = "block", delay: float = 3.0, duration: float = 5.0) -> dict:
+    """DEMO: a technician walks into the aisle ahead of the robot ("cross" or "block"); the robot's
+    lidar makes it stop and wait during go_to/go_home."""
+    return quick_client().spawn_technician(mode, None, delay, duration)
+
+
+@mcp.tool()
+def get_lidar_scan() -> dict:
+    """The robot's front lidar: 37 ranges (m) from -90 to +90 degrees; None = nothing within 4 m."""
+    return quick_client().get_lidar_scan()
+
+
+@mcp.tool()
 def reset(seed: int | None = None) -> dict:
     """DEMO: reset the whole data center. A seed randomizes which parts are faulty."""
     return main_client().reset(seed)

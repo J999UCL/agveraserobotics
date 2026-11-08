@@ -27,7 +27,8 @@ from .skills import Skills
 
 QUICK = {"ping", "get_status", "get_fleet_health", "get_server_health", "get_event_log", "get_work_orders",
          "get_events", "get_installed", "get_onboard_inventory", "get_depot_inventory", "list_servers",
-         "capture_image", "get_camera_info", "pixel_to_world", "get_pull_force", "stop", "set_jam", "inject_fault"}
+         "capture_image", "get_camera_info", "pixel_to_world", "get_pull_force", "stop", "set_jam", "inject_fault",
+         "get_lidar_scan", "get_nav_log", "spawn_technician"}
 
 
 def _jpeg(rgb: np.ndarray, quality: int = 85) -> str:
@@ -200,6 +201,8 @@ class SimServer:
             "list_servers": lambda: [{"server": sid, "rack": f"R{sv.row}-{sv.rack:02d}", "u": sv.u}
                                      for sid, sv in s.layout.servers.items()],
             "get_pull_force": lambda: {"force_n": round(s.pull_force(), 2), "peak_n": round(s.peak_force(), 2)},
+            "get_lidar_scan": s.lidar_scan,
+            "get_nav_log": lambda: s.nav_log,
             # cameras
             "capture_image": capture_image,
             "get_camera_info": lambda camera="wrist": {"K": s.camera_intrinsics(camera), "pose": s.camera_pose(camera)},
@@ -226,5 +229,6 @@ class SimServer:
             # demo / test controls
             "set_jam": set_jam,
             "inject_fault": inject_fault,
+            "spawn_technician": lambda mode="cross", x=None, delay=0.0, duration=4.0: s.spawn_technician(mode, x, delay, duration),
             "reset": lambda seed=None: s.reset(seed=seed),
         }

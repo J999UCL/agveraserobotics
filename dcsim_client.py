@@ -125,4 +125,11 @@ class SimClient:
     def inject_fault(self, server: str, slot: str, fault: str) -> dict:
         return self.call("inject_fault", server=server, slot=slot, fault=fault)
 
+    def spawn_technician(self, mode: str = "cross", x: float | None = None, delay: float = 0.0, duration: float = 4.0) -> dict:
+        """Demo: a technician walks into the aisle ("cross" once, or "block" = stand there for duration s)."""
+        return self.call("spawn_technician", mode=mode, x=x, delay=delay, duration=duration)
+
+    def get_lidar_scan(self) -> dict: return self.call("get_lidar_scan")
+    def get_nav_log(self) -> list[dict]: return self.call("get_nav_log")
+
     def reset(self, seed: int | None = None) -> dict: return self.call("reset", seed=seed)

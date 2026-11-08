@@ -22,7 +22,7 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
-from .build import DEPOT_SHELF_Z, Layout, build_model, rot_z
+from .build import DEPOT_SHELF_Z, LIDAR_RANGE, LIDAR_RAYS, Layout, build_model, rot_z
 from .config import SERVICE_STANDOFF, TRAY_ABOVE_BASE, SimCfg
 from .health import PartHealth, ServerHealth
 from .kinematics import ARM_DOF, IK, Q_NOMINAL, QUAT_DOWN_FINGERS_Y, yaw_rotate
@@ -31,6 +31,9 @@ GRIP_OPEN, GRIP_CLOSED = 255.0, 0.0
 MAX_JOINT_SPEED = 1.2  # rad/s cap on commanded arm joint motion
 SEAT_STIFFNESS = 2000.0  # N/m: a healthy part unseats ~6 mm into the lift (12 N)
 TRAVEL_LIFT = 0.55  # lift height while driving
+STOP_DIST = 0.60  # lidar: stop if anything is this close in the travel direction
+BUMPER_DIST = 0.12  # virtual bumper: emergency-stop event below this
+MAX_WAIT = 20.0  # give up on a blocked aisle after this long
 
 
 class Stopped(Exception):
@@ -74,6 +77,7 @@ class DataCenterSim:
         self.model, self.layout, _ = build_model(self.cfg)
         self.m, self.d = self.model, mujoco.MjData(self.model)
         self.ik = IK(self.model)
+        self._sensors(False)  # lidar rays are expensive; they only run while driving (or on demand)
         self.rng = np.random.default_rng(0)
         self.realtime = realtime
         self.step_hooks: list[Callable[[], None]] = []
@@ -104,18 +108,24 @@ class DataCenterSim:
         self.link0_body = m.body("link0").id
         self.depot_body = m.body("depot").id
         self.chassis_mocap = m.body_mocapid[m.body("chassis").id]
+        self.tech_mocap = m.body_mocapid[m.body("technician").id]
+        self.lidar_adr = m.sensor_adr[m.sensor("lidar_00").id]
         self.tcp_site = m.site("tcp").id
         self.srv = {}
         for sid, sv in self.layout.servers.items():
             j = m.joint(sv.slide_joint).id
             self.srv[sid] = {"tray": m.body(sv.tray_body).id, "qadr": m.jnt_qposadr[j],
-                             "handle_eq": mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, sv.handle_eq)}
+                             "handle_eq": mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, sv.handle_eq),
+                             "lock_eq": mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, f"s{sv.index}_rail_lock")}
         self.eq, self.part_qadr, self.grasp_site = {}, {}, {}
         for cid in self.layout.components:
             for kind in ("slot", "hand", "store"):
                 self.eq[(cid, kind)] = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, f"weld_{kind}_{cid}")
             self.part_qadr[cid] = m.jnt_qposadr[m.joint(f"{cid}_free").id]
             self.grasp_site[cid] = m.site(f"{cid}_grasp").id
+        bid_of = {cid: m.body(cid).id for cid in self.layout.components}
+        self.part_geoms = {cid: [g for g in range(m.ngeom) if m.geom_bodyid[g] == b and m.geom_contype[g] == 2]
+                           for cid, b in bid_of.items()}
         self.mat = {n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MATERIAL, f"led_{n}")
                     for n in ("ok", "fault", "identify", "off", "rebuild")}
 
@@ -144,6 +154,8 @@ class DataCenterSim:
                 h.parts[cid] = ph  # parts can move between servers; every server knows every part
             d.eq_active[self.eq[(cid, "hand")]] = False
             self._place_in_slot(cid, c.slot_key)
+        for sid in self.srv:
+            self._latch_tray(sid, True)
         mujoco.mj_forward(m, d)
         self.active_server: str | None = None
         self._held: str | None = None
@@ -153,6 +165,8 @@ class DataCenterSim:
         self._tick = 0
         self.events: list[dict] = []
         self.work_orders: list[dict] = []
+        self.nav_log: list[dict] = []
+        self._tech_keys = None
         if seed is not None:
             r = np.random.default_rng(seed)
             sids = list(self.layout.servers)
@@ -202,6 +216,7 @@ class DataCenterSim:
         for _ in range(n):
             self._apply_ctrl()
             t0 = time.perf_counter()
+            self._update_technician()
             for _ in range(sub):
                 mujoco.mj_step(self.m, self.d)
                 self._sync_chassis()
@@ -253,35 +268,153 @@ class DataCenterSim:
         xy = pos[:2] - SERVICE_STANDOFF * np.array([np.cos(yaw), np.sin(yaw)])
         return np.array([xy[0], xy[1], yaw, DEPOT_SHELF_Z])
 
-    def _drive_segment(self, target: np.ndarray, guard=None) -> bool:
-        """Move base targets [x, y, yaw, lift] smoothly to `target`. Returns False if guarded."""
+    # ---------------------------------------------------------------- sensing while driving
+    def _sensors(self, on: bool) -> None:
+        bit = int(mujoco.mjtDisableBit.mjDSBL_SENSOR)
+        if on:
+            self.m.opt.disableflags &= ~bit
+        else:
+            self.m.opt.disableflags |= bit
+
+    def lidar_scan(self) -> dict:
+        """2D lidar on the front of the base: 37 rays from -90 to +90 deg (robot frame, 0 = ahead).
+        Ranges in meters measured from the front bumper; None = nothing within 4 m."""
+        self._sensors(True)
+        mujoco.mj_forward(self.m, self.d)
+        r = self.d.sensordata[self.lidar_adr:self.lidar_adr + LIDAR_RAYS].copy()
+        self._sensors(False)
+        angles = np.linspace(-90, 90, LIDAR_RAYS)
+        return {"angles_deg": angles.round(1).tolist(),
+                "ranges_m": [None if (x < 0 or x >= LIDAR_RANGE - 1e-6) else round(float(x), 3) for x in r]}
+
+    def _path_clearance(self, travel_dir_robot: float) -> float:
+        """Smallest lidar range within +/-35 deg of the travel direction (robot frame, rad)."""
+        r = np.array(self.d.sensordata[self.lidar_adr:self.lidar_adr + LIDAR_RAYS])
+        ang = np.linspace(-np.pi / 2, np.pi / 2, LIDAR_RAYS)
+        cone = (np.abs(ang - travel_dir_robot) < np.radians(35)) & (r >= 0) & (r < LIDAR_RANGE - 1e-6)
+        return float(r[cone].min()) if cone.any() else np.inf
+
+    def _drive_segment(self, target: np.ndarray, watch: bool = False) -> bool:
+        """Drive the base targets [x, y, yaw, lift] to target with a velocity profile.
+
+        With watch=True the lidar is checked every tick: anything closer than STOP_DIST in the
+        travel direction brakes the robot to a stop; it waits and resumes once the path has been
+        clear for a moment. Returns False if blocked longer than MAX_WAIT.
+        """
         rc, dt = self.cfg.robot, self.cfg.control_dt
         start = self.base_cmd.copy()
-        delta = target - start
+        delta = np.asarray(target, float) - start
         delta[2] = _wrap(delta[2])
-        dur = max(np.linalg.norm(delta[:2]) / rc.drive_speed, abs(delta[2]) / rc.turn_speed,
-                  abs(delta[3]) / rc.lift_speed, dt)
-        n = int(np.ceil(dur / dt * 1.25))  # extra time for ease-in/out
-        for i in range(1, n + 1):
-            a = i / n
-            a = a * a * (3 - 2 * a)
-            self.base_cmd = start + delta * a
-            self._checked_step()
-            if guard is not None:
-                reason = guard()
-                if reason:
-                    self.guard_reason = reason
+        T = max(np.linalg.norm(delta[:2]) / rc.drive_speed, abs(delta[2]) / rc.turn_speed,
+                abs(delta[3]) / rc.lift_speed, dt)
+        sdot_max = 1.0 / T
+        acc = sdot_max / 0.7  # ~0.7 s to reach full speed
+        yaw = float(start[2])
+        rel = np.array([np.cos(-yaw) * delta[0] - np.sin(-yaw) * delta[1],
+                        np.sin(-yaw) * delta[0] + np.cos(-yaw) * delta[1]])
+        travel_dir = float(np.arctan2(rel[1], rel[0])) if np.linalg.norm(rel) > 0.05 else None
+        watch = watch and travel_dir is not None and abs(travel_dir) < np.radians(60)
+        self._sensors(watch)
+        if watch:
+            mujoco.mj_forward(self.m, self.d)  # fresh lidar readings before the first check
+        try:
+            return self._drive_profile(start, delta, sdot_max, acc, travel_dir, watch)
+        finally:
+            self._sensors(False)
+
+    def _drive_profile(self, start, delta, sdot_max, acc, travel_dir, watch) -> bool:
+        dt = self.cfg.control_dt
+        s, sdot, waited, clear_for, stopped = 0.0, 0.0, 0.0, 0.0, False
+        while s < 1.0:
+            blocked = False
+            if watch and (1.0 - s) * np.linalg.norm(delta[:2]) > 0.8:
+                c = self._path_clearance(travel_dir)
+                if c < BUMPER_DIST:
+                    self._log_event("bumper_estop", clearance_m=round(c, 3))
+                blocked = c < STOP_DIST
+            if blocked:
+                sdot = max(0.0, sdot - 4 * acc * dt)  # brake hard
+                clear_for = 0.0
+                if not stopped:
+                    stopped = True
+                    c = round(self._path_clearance(travel_dir), 2)
+                    self.nav_log.append({"event": "obstacle_stop", "t": round(self.time, 2), "clearance_m": c})
+                    self._log_event("obstacle_stop", clearance_m=c)
+                waited += dt
+                if waited > MAX_WAIT:
+                    self.nav_log.append({"event": "gave_up", "t": round(self.time, 2), "waited_s": round(waited, 1)})
                     self.base_cmd = self.d.qpos[self.base_qadr].copy()
                     return False
-        for _ in range(25):
+            else:
+                if stopped:
+                    clear_for += dt
+                    if clear_for < 1.0:  # stay put until the path has been clear for a moment
+                        self.base_cmd = start + delta * s
+                        self._checked_step()
+                        continue
+                    stopped = False
+                    self.nav_log.append({"event": "resumed", "t": round(self.time, 2), "waited_s": round(waited, 1)})
+                    self._log_event("resumed", waited_s=round(waited, 1))
+                brake = np.sqrt(2 * acc * max(0.0, 1.0 - s))
+                sdot = min(sdot_max, sdot + acc * dt, max(brake, 0.02 * sdot_max))
+            s = min(1.0, s + sdot * dt)
+            self.base_cmd = start + delta * s
+            self._checked_step()
+        for _ in range(20):
             self._checked_step()
         return True
 
-    def drive_route(self, waypoints: list[np.ndarray], guard=None) -> bool:
+    def drive_route(self, waypoints: list[np.ndarray]) -> bool:
+        """Follow waypoints [x, y, yaw, lift(, watch)]. The drive down the aisle is lidar-guarded;
+        turning on the spot and the final approach to a rack/dock are not (the rack itself is close)."""
+        self.nav_log = []
         for wp in waypoints:
-            if not self._drive_segment(np.asarray(wp, float), guard):
+            wp = np.asarray(wp, float)
+            if not self._drive_segment(wp[:4], watch=len(wp) > 4 and wp[4] > 0):
                 return False
         return True
+
+    # ---------------------------------------------------------------- moving obstacle (demo)
+    def spawn_technician(self, mode: str = "cross", x: float | None = None, delay: float = 0.0,
+                         duration: float = 4.0) -> dict:
+        """Demo: a technician walks into the aisle. mode "cross": walks across it once.
+        "block": steps into the middle of the aisle, stands for duration seconds, then leaves.
+        x defaults to 1.6 m ahead of the robot along the aisle."""
+        if x is None:
+            b = self.base_pose()
+            heading = float(np.sign(np.cos(b[2]))) or 1.0
+            x = float(b[0] + 1.6 * heading)
+        y0, y1 = 0.75, -0.75
+        t0 = self.time + delay
+        if mode == "cross":
+            keys = [(t0, [x, y0]), (t0 + 2.0, [x, y1])]
+        elif mode == "block":
+            keys = [(t0, [x, y0]), (t0 + 1.0, [x, 0.0]), (t0 + 1.0 + duration, [x, 0.0]), (t0 + 2.0 + duration, [x, y1])]
+        else:
+            raise ValueError("mode must be 'cross' or 'block'")
+        self._tech_keys = keys
+        return {"mode": mode, "x": round(x, 2), "starts_in_s": delay}
+
+    def _update_technician(self) -> None:
+        keys = self._tech_keys
+        mid = self.tech_mocap
+        if not keys or self.time < keys[0][0] or self.time > keys[-1][0] + 0.5:
+            self.d.mocap_pos[mid] = [0, 0, -10]
+            if keys and self.time > keys[-1][0] + 0.5:
+                self._tech_keys = None
+            return
+        for (ta, pa), (tb, pb) in zip(keys, keys[1:]):
+            if ta <= self.time <= tb:
+                a = (self.time - ta) / max(tb - ta, 1e-6)
+                pa_, pb_ = np.array(pa), np.array(pb)
+                pp = pa_ + (pb_ - pa_) * a
+                self.d.mocap_pos[mid] = [pp[0], pp[1], 0.0]
+                dd = pb_ - pa_
+                if np.linalg.norm(dd) > 1e-6:
+                    yw = np.arctan2(dd[1], dd[0])
+                    self.d.mocap_quat[mid] = [np.cos(yw / 2), 0, 0, np.sin(yw / 2)]
+                return
+        self.d.mocap_pos[mid] = [keys[-1][1][0], keys[-1][1][1], 0.0]
 
     def route_to(self, goal: np.ndarray) -> list[np.ndarray]:
         """Aisle route: back out to the aisle centreline, turn, drive along it, turn, pull in."""
@@ -295,7 +428,7 @@ class DataCenterSim:
             heading = 0.0 if dx > 0 else np.pi
             heading = cur[2] + _wrap(heading - cur[2])
             wps.append(np.array([cur[0], 0.0, heading, travel_lift]))
-            wps.append(np.array([goal[0], 0.0, heading, travel_lift]))
+            wps.append(np.array([goal[0], 0.0, heading, travel_lift, 1.0]))  # 5th value 1 = lidar-watched
         last = wps[-1] if wps else cur
         face = last[2] + _wrap(goal[2] - last[2])
         wps.append(np.array([goal[0], 0.0, face, travel_lift]))
@@ -400,6 +533,7 @@ class DataCenterSim:
         self.grip_cmd = GRIP_OPEN
         if self._on_handle:
             self.d.eq_active[self.srv[self._on_handle]["handle_eq"]] = False
+            self._latch_tray(self._on_handle, True)
             self._on_handle = None
         released = self._release()
         for _ in range(20):
@@ -433,6 +567,13 @@ class DataCenterSim:
         t = self.cfg.tray
         return self.tray_point(server, [t.handle_x - 0.006, 0, t.handle_z])
 
+    def _latch_tray(self, sid: str, on: bool) -> None:
+        """Rail latch: a joint equality pinning the tray's slide at its current position."""
+        s = self.srv[sid]
+        self.m.eq_data[s["lock_eq"]][0] = self.d.qpos[s["qadr"]]  # polycoef y0
+        self.m.eq_data[s["lock_eq"]][1:5] = 0.0
+        self.d.eq_active[s["lock_eq"]] = on
+
     def _try_handle(self) -> bool:
         tcp = self.d.site_xpos[self.tcp_site].copy()
         if self.gripper_width() < 0.003:
@@ -445,6 +586,7 @@ class DataCenterSim:
                 data[0:3] = _rot(qh).T @ (tcp - ph)
                 data[3:6] = _rot(qt).T @ (tcp - pt)
                 self.d.eq_active[s["handle_eq"]] = True
+                self._latch_tray(sid, False)
                 self._on_handle = sid
                 self._log_event("gripped_tray_handle", server=sid)
                 return True
@@ -554,6 +696,12 @@ class DataCenterSim:
         p1, q1 = self._body_pose(self.m.body(pid).id)
         self._set_weld(self.eq[(pid, "hand")], p1, q1, self.hand_body)
         self.d.eq_active[self.eq[(pid, "hand")]] = True
+        self._part_collisions(pid, False)  # the weld carries it; finger contacts would only fight it
+
+    def _part_collisions(self, pid: str, on: bool) -> None:
+        for g in self.part_geoms[pid]:
+            self.m.geom_contype[g] = 2 if on else 0
+            self.m.geom_conaffinity[g] = 1 if on else 0
 
     def _try_grasp(self) -> str | None:
         if self._held:
@@ -590,6 +738,7 @@ class DataCenterSim:
             return None
         self.d.eq_active[self.eq[(pid, "hand")]] = False
         self._held = None
+        self._part_collisions(pid, True)
         part = self.parts[pid]
         if part.where != "slot":
             key = self._capture_slot(pid, storage_only=True)
@@ -631,6 +780,7 @@ class DataCenterSim:
         part.where, part.slot = "slot", key
         if self._held == pid:
             self.d.eq_active[self.eq[(pid, "hand")]] = False
+            self._part_collisions(pid, True)
             self._grip_z0 = float(self.d.site_xpos[self.tcp_site][2])
         if sd.where == "tray":
             h = self.health[sd.server]
@@ -739,7 +889,11 @@ class DataCenterSim:
         r = self._renderers[(w, h)]
         if depth:
             r.enable_depth_rendering()
-        r.update_scene(self.d, camera)
+        opt = mujoco.MjvOption()
+        lidar_on = not (self.m.opt.disableflags & int(mujoco.mjtDisableBit.mjDSBL_SENSOR))
+        # lidar rays only in room/follow views and only while the lidar is running (never in the wrist camera)
+        opt.flags[mujoco.mjtVisFlag.mjVIS_RANGEFINDER] = lidar_on and camera != "wrist"
+        r.update_scene(self.d, camera, scene_option=opt)
         img = r.render().copy()
         if depth:
             r.disable_depth_rendering()

@@ -69,7 +69,8 @@ class Skills:
         except Stopped:
             return self._result(False, error="stopped")
         s.active_server = server if ok else None
-        return self._result(ok, server=server, drive_time_s=round(s.time - t0, 1), waypoints=len(route))
+        extra = {} if ok else {"error": "aisle blocked: obstacle did not clear, robot stopped and is waiting in the aisle"}
+        return self._result(ok, server=server, drive_time_s=round(s.time - t0, 1), nav_events=list(s.nav_log), **extra)
 
     def go_home(self) -> dict:
         """Drive back to the dock at the spares depot."""
@@ -86,7 +87,9 @@ class Skills:
         except Stopped:
             return self._result(False, error="stopped")
         s.active_server = None
-        return self._result(ok, at="dock", drive_time_s=round(s.time - t0, 1))
+        extra = {} if ok else {"error": "aisle blocked: obstacle did not clear"}
+        return self._result(ok, at="dock" if ok else "aisle", drive_time_s=round(s.time - t0, 1),
+                            nav_events=list(s.nav_log), **extra)
 
     # ------------------------------------------------------------ tray
     def _grip_tab(self, server: str) -> np.ndarray:

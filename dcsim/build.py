@@ -45,6 +45,9 @@ ROBOT_WHITE = [0.90, 0.91, 0.92, 1]
 ROBOT_GREY = [0.22, 0.23, 0.25, 1]
 
 DEPOT_SHELF_Z = 0.80
+LIDAR_RAYS = 37  # across the front 180 degrees (5 deg apart)
+LIDAR_Z = 0.20
+LIDAR_RANGE = 4.0
 
 
 @dataclass
@@ -164,6 +167,7 @@ def build_spec(cfg: SimCfg | None = None) -> tuple[mujoco.MjSpec, Layout]:
                 servers[sp.id] = _build_tray(spec, cfg, body, sp, len(servers), pos, yaw, slots)
     depot = depot_pose(cfg)
     _build_depot(spec, cfg, depot, slots)
+    _build_technician(spec)
     components = _build_components(spec, cfg, slots, servers, depot)
     return spec, Layout(slots, components, servers, racks, depot)
 
@@ -293,9 +297,10 @@ def _build_tray(spec, cfg: SimCfg, rack_body, sp, index: int, rack_pos, rack_yaw
 
     v("floor", [D / 2, 0, 0.002], [D / 2, W, 0.002], CHASSIS)
     v("board", [D / 2 + 0.02, 0, 0.004], [D / 2 - 0.04, W - 0.01, 0.002], BOARD)
+    # tray walls: contype 4 / conaffinity 1 -> the robot (contype 1) hits them, parts (contype 2) don't
     for side, sy in (("l", 1), ("r", -1)):
-        v(f"wall_{side}", [D / 2, sy * (W - 0.002), H / 2], [D / 2, 0.002, H / 2], CHASSIS)
-    v("wall_back", [D - 0.002, 0, H / 2], [0.002, W, H / 2], CHASSIS)
+        _box(tray, f"{pfx}wall_{side}", [D / 2, sy * (W - 0.002), H / 2], [D / 2, 0.002, H / 2], CHASSIS, 4, 1)
+    _box(tray, f"{pfx}wall_back", [D - 0.002, 0, H / 2], [0.002, W, H / 2], CHASSIS, 4, 1)
     v("bezel", [0.004, 0, H / 2], [0.004, W, H / 2], [0.18, 0.18, 0.2, 1])
     v("status_led", [-0.001, 0.19, H - 0.012], [0.002, 0.005, 0.005], mat="led_ok")
     v("id_strip", [-0.001, -0.17, H - 0.012], [0.001, 0.03, 0.006], [0.95, 0.95, 0.95, 1])
@@ -323,6 +328,10 @@ def _build_tray(spec, cfg: SimCfg, rack_body, sp, index: int, rack_pos, rack_yaw
     eq = spec.add_equality(name=f"{pfx}grip_handle", type=mujoco.mjtEq.mjEQ_CONNECT, objtype=mujoco.mjtObj.mjOBJ_BODY,
                            name1="hand", name2=f"tray_{index}", active=False, solref=[0.02, 1.0])
     eq.data = np.zeros(len(eq.data))
+    # rail latch: holds the tray where it is unless the gripper has its pull tab (set at runtime)
+    lock = spec.add_equality(name=f"{pfx}rail_lock", type=mujoco.mjtEq.mjEQ_JOINT, objtype=mujoco.mjtObj.mjOBJ_JOINT,
+                             name1=f"{pfx}slide", active=True, solref=[0.01, 1.0])
+    lock.data = np.zeros(len(lock.data))
     return ServerDef(sp.id, index, sp.row, sp.rack, sp.u, f"tray_{index}", f"{pfx}slide", f"{pfx}grip_handle",
                      np.asarray(rack_pos, float), float(rack_yaw), bottom)
 
@@ -399,9 +408,20 @@ def _build_robot(spec, cfg: SimCfg, slots) -> None:
             ch.add_geom(name=f"wheel_{i}_roller{k}", type=BOX, size=[0.06, 0.004, 0.012], pos=[wx, wy + sy_ * 0.032, 0.065],
                         quat=[float(np.cos(a / 2)), 0, 0, float(np.sin(a / 2))], rgba=[0.35, 0.36, 0.38, 1],
                         contype=0, conaffinity=0)
-    # follows the robot's position (not its heading): behind it down the aisle, looking along +X
-    ch.add_camera(name="follow", mode=mujoco.mjtCamLight.mjCAMLIGHT_TRACKCOM, pos=[-1.9, -0.35, 2.1],
-                  xyaxes=[0.17, -0.985, 0, 0.62, 0.107, 0.777], fovy=60)
+    # follows the robot's position (not its heading): behind and above it, looking along +X
+    ch.add_camera(name="follow", mode=mujoco.mjtCamLight.mjCAMLIGHT_TRACKCOM, pos=[-1.25, -0.55, 2.35],
+                  xyaxes=[0.4, -0.917, 0, 0.71, 0.31, 0.63], fovy=62)
+    # 2D lidar: a fan of rangefinder rays across the front 180 degrees, 20 cm above the floor
+    for k in range(LIDAR_RAYS):
+        a = -np.pi / 2 + np.pi * k / (LIDAR_RAYS - 1)
+        qz = [np.cos(a / 2), 0, 0, np.sin(a / 2)]
+        qy = [np.cos(np.pi / 4), 0, np.sin(np.pi / 4), 0]  # turn the site's +Z (ray direction) to +X
+        q = np.zeros(4)
+        mujoco.mju_mulQuat(q, np.array(qz), np.array(qy))
+        ch.add_site(name=f"lidar_{k:02d}", pos=[cx / 2 + 0.025, 0, LIDAR_Z], quat=list(q), size=[0.005, 0, 0], group=5)
+        sens = spec.add_sensor(name=f"lidar_{k:02d}", type=mujoco.mjtSensor.mjSENS_RANGEFINDER,
+                               objtype=mujoco.mjtObj.mjOBJ_SITE, objname=f"lidar_{k:02d}", cutoff=LIDAR_RANGE)
+        sens.intprm[0] = 1  # MuJoCo 4 rangefinder data spec: 1 = distance only
 
 
 # =========================================================================== depot
@@ -424,6 +444,25 @@ def _build_depot(spec, cfg: SimCfg, depot, slots) -> None:
         name = f"DF{i + 1}"
         slots[f"depot:{name}"] = SlotDef(name, "fan", "depot", None, np.array([-0.08, y, z + t.fan_size[2] / 2 + 0.002]))
         _box(body, f"depot_pad_{name}", [-0.08, y, z + 0.001], [0.035, 0.045, 0.001], SOCKET, 0, 0)
+
+
+# =========================================================================== people
+def _build_technician(spec) -> None:
+    """A walking technician (moving obstacle), driven by the sim. Parked far away until used."""
+    b = spec.worldbody.add_body(name="technician", mocap=True, pos=[0, 0, -10])
+    skin, shirt, pants = [0.85, 0.68, 0.55, 1], [0.15, 0.35, 0.65, 1], [0.15, 0.15, 0.18, 1]
+    for side, y in (("l", 0.09), ("r", -0.09)):
+        b.add_geom(name=f"tech_leg_{side}", type=mujoco.mjtGeom.mjGEOM_CAPSULE, size=[0.06, 0.40, 0],
+                   pos=[0, y, 0.46], rgba=pants, contype=0, conaffinity=0)
+        b.add_geom(name=f"tech_arm_{side}", type=mujoco.mjtGeom.mjGEOM_CAPSULE, size=[0.045, 0.27, 0],
+                   pos=[0, y * 2.3, 1.18], rgba=shirt, contype=0, conaffinity=0)
+    b.add_geom(name="tech_torso", type=BOX, size=[0.12, 0.2, 0.28], pos=[0, 0, 1.22], rgba=shirt, contype=0, conaffinity=0)
+    b.add_geom(name="tech_vest", type=BOX, size=[0.125, 0.205, 0.08], pos=[0, 0, 1.30], rgba=[0.95, 0.75, 0.1, 1],
+               contype=0, conaffinity=0)
+    b.add_geom(name="tech_head", type=mujoco.mjtGeom.mjGEOM_SPHERE, size=[0.11, 0, 0], pos=[0, 0, 1.66], rgba=skin,
+               contype=0, conaffinity=0)
+    b.add_geom(name="tech_helmet", type=mujoco.mjtGeom.mjGEOM_SPHERE, size=[0.115, 0, 0], pos=[0, 0, 1.70],
+               rgba=[0.95, 0.95, 0.95, 1], contype=0, conaffinity=0)
 
 
 # =========================================================================== parts
