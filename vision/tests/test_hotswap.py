@@ -9,11 +9,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from perception.adapter import capture_from_wrist_frames, detect_axes
-from perception.geometry import USD_TO_CV, backproject, transform
-from perception.hotswap import HotSwapPerception, calibrate_tab_offset
-from perception.synthetic import render
-from perception.synthetic_hotswap import CENTRE_Z, FACE_X, FOVY_ISAAC, build, led_pos, tab_pos
+from vision.adapter import capture_from_wrist_frames, detect_axes
+from vision.geometry import USD_TO_CV, backproject, transform
+from vision.hotswap import HotSwapPerception, calibrate_tab_offset
+from vision.synthetic import render
+from vision.synthetic_hotswap import CENTRE_Z, FACE_X, FOVY_ISAAC, build, led_pos, tab_pos
 
 LEDS = {b: "green" for b in range(12)} | {6: "amber", 9: "blue", 3: "off"}
 TARGET = [FACE_X, 0.0, CENTRE_Z]
