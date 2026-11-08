@@ -9,3 +9,5 @@ __pycache__/
 out/
 perception/_assets/
 .pytest_cache/
+
+sim/episodes/
