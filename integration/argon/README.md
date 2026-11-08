@@ -32,8 +32,12 @@ DCSIM=localhost:5555 DCSIM_REPO=/path/to/AgentVerseBob2 python run_dcsim_argon.p
 
 Traces go to `runs/dcsim/`, camera frames to `runs/dcsim/<mode>_<scenario>/`.
 
-For a simulator on Modal, set `DCSIM` to the address it prints. The agent needs `pillow` and
-`numpy`; `dcsim_client.py` is the only file it uses from this repo.
+Install what the agent needs with `pip install -r integration/argon/requirements.txt`.
+
+For a simulator on Modal, set `DCSIM` to the address it prints.
+
+**Shortcut:** `python scripts/run_agent.py --only clean_failure` finds the agent and `vision/` itself,
+reads `GEMINI_API_KEY` from `.env`, and defaults to `gemini-3.5-flash-lite`.
 
 Tests (scripted decisions, no Gemini; needs `pytest`):
 
@@ -66,13 +70,26 @@ DCSIM=localhost:5555 DCSIM_REPO=/path/to/AgentVerseBob2 python -m pytest test_dc
   and the depot has 6.
 - **Start position:** the robot starts at the server with the tray open, because the LEDs are only
   visible from there. In the obstacle scenario it takes that first look, then returns to the dock.
-- **Rand's `vision/` package isn't used yet.** It is tuned to the front panels of Jeet's scene; LED
-  reading here is a small version written for the open-tray view.
 
 ## Test results
 
 | | |
 |---|---|
 | 12 scenarios, autopilot only | same outcome as the toy world: 6 pass (`clean_failure`, `obstacle`, `raid_rebuild`, `no_spares`, `two_failures`, `same_group_double`); 6 escalate to Argon and stop safely |
-| 7 scripted-decision tests | pass: swap, physical jam, two failures, technician in the aisle, dead spare, restock trip, LED reading |
+| Final combined code with `vision/tray.py`, `gemini-3.5-flash-lite`, one run each | 15 vision tests, 10 scripted-decision tests and all 12 scenarios pass |
 | Real Gemini (`gemini-4-argon`), one run each | the 6 escalating scenarios pass (`misleading_led`, `jammed_caddy`, `false_alarm_heat`, `doa_spare`, `smart_false_alarm`, `smart_silent`), 2-6 model calls and 21-75 s of model time each |
+
+## Camera perception (vision/)
+
+`perceive()` and the pre-pick check use `vision/tray.py` from the team repo, found automatically
+when this file sits inside the team repo; otherwise set `VISION_REPO`. One wrist frame over the
+open tray gives:
+
+- **LED per bay.** Glowing blobs are matched to each slot's known LED position (`get_slot_leds`), and lights that aren't slot LEDs are ignored. A missing LED is reported as "hidden" (depth shows something in front of it) or "off" (empty slot). Lime, a new part settling in, is reported as "verifying", never a fault.
+- **Blocked slots.** Depth is used to check whether anything lies in the gripper's way down to each part (`get_slot_grasp_points`). Slots blocked by the same object are grouped into one obstacle.
+
+**Two obstacle modes:**
+- **`DcsimRack(..., obstacle_mode="aisle")` (default):** the `obstacle` scenario is a technician in the aisle, and the **lidar** stops the robot.
+- **`obstacle_mode="tray"`:** a loose cable lands across the open tray over the bay (`drop_cable`). Nothing physical stops the arm; the **wrist camera** sees it, so `move_to` and `pull_caddy` return `BLOCKED` until it's cleared.
+
+The camera check before every pick is on in both modes.

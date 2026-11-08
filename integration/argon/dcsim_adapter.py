@@ -15,10 +15,17 @@ Mapping
                               empty but spares are left, the robot drives to the depot, restocks
                               and comes back
   * insert_caddy           -> install the spare in the empty slot
-  * obstacle               -> a technician blocking the aisle; the lidar stops the robot and the
-                              move is BLOCKED. wait() lets the person walk away
+  * obstacle               -> obstacle_mode="aisle" (default): a technician blocking the aisle; the
+                              lidar stops the robot and the move is BLOCKED. wait() lets the person
+                              walk away.
+                              obstacle_mode="tray": a loose cable lands across the open tray over the
+                              bay; the WRIST CAMERA sees it in the gripper's path (vision/corridor.py),
+                              so move_to / pull_caddy are BLOCKED until it's gone
+  * camera path check      -> always on: before reaching into a slot, and in perceive(), the gripper's
+                              way down to each slot is checked in the wrist RGB-D frame
   * LEDs                   -> the slot LEDs in the scene show what the World says (including wrong
                               LEDs), and perceive() reads them back from the wrist-camera RGB-D
+                              with vision/tray.py
   * telemetry / RAID / thermal -> logical state inherited from World (as in MujocoRack)
 
 The agent's own words (drives, caddies, SMART, RAID) are unchanged; read "caddy" as "RAM stick".
@@ -43,6 +50,15 @@ _repo = os.environ.get("DCSIM_REPO") or str(Path(__file__).resolve().parents[2])
 if _repo not in sys.path:
     sys.path.insert(0, _repo)
 from dcsim_client import SimClient  # noqa: E402
+
+# Camera perception (vision/ at the root of the team repo): checks the gripper's way to a part.
+# Found by walking up from this file (works from integration/argon/ or a copy in robot/sandbox/),
+# or set VISION_REPO to the team repo.
+_team_root = os.environ.get("VISION_REPO") or next(
+    (str(p) for p in Path(__file__).resolve().parents if (p / "vision" / "corridor.py").is_file()), None)
+if _team_root and _team_root not in sys.path:
+    sys.path.append(_team_root)
+from vision.tray import TrayPerception  # noqa: E402
 
 SERVER = "R1-05-U20"
 SPARE_SLOTS = ("CD1", "CD2", "CD3", "CD4")
@@ -75,8 +91,13 @@ def classify_led(rgb) -> str:
 
 class DcsimRack(World):
     def __init__(self, base: World, server: str = SERVER, client: SimClient | None = None,
-                 frames_dir: str | None = None, verbose: bool = False):
+                 frames_dir: str | None = None, verbose: bool = False, obstacle_mode: str = "aisle"):
         super().__init__(**{k: getattr(base, k) for k in base.__dataclass_fields__})
+        if obstacle_mode not in ("aisle", "tray"):
+            raise ValueError("obstacle_mode must be 'aisle' or 'tray'")
+        self.obstacle_mode = obstacle_mode
+        self.cable = False
+        self.vision = TrayPerception()          # on-robot camera perception of the open tray
         self.server = server
         self.c = client or SimClient(*_addr())
         self.frames_dir = frames_dir
@@ -91,9 +112,13 @@ class DcsimRack(World):
             self.c.set_jam(self._slot(i), server, True)
         self._sync_leds()
         self._at_server()                       # robot starts on patrol at the server, tray out
+        if self.obstacle_at is not None and obstacle_mode == "tray":
+            self._log(f"obstacle scenario (tray): a loose cable lands over bay {self.obstacle_at}")
+            self.c.drop_cable(self.server, self._slot(self.obstacle_at))
+            self.cable = True
         self._view()
         self._scan = self._read_leds()
-        if self.obstacle_at is not None:        # called away after the patrol look; aisle then blocks
+        if self.obstacle_at is not None and obstacle_mode == "aisle":  # called away; aisle then blocks
             self._log("obstacle scenario: robot returns to the dock, a technician then blocks the aisle")
             self.c.push_tray_in()
             self.c.go_home()
@@ -141,37 +166,37 @@ class DcsimRack(World):
         return bool(self.c.view_tray()["ok"])
 
     def _read_leds(self, cap: dict | None = None):
-        """LED colour per bay from the wrist RGB-D frame: project each slot LED (map knowledge)
-        into the image, check the depth agrees (not hidden), classify the pixel colour."""
+        """One look at the open tray with vision/tray.py: LED colour per bay (glowing blobs matched to
+        each slot's known LED position, depth for hidden LEDs) and, from depth, whether anything lies
+        in the gripper's way down to each slot."""
         cap = cap or self.c.capture_rgbd("wrist")
-        rgb, depth, K = cap["rgb"], cap["depth"], cap["K"]
-        pos, R = cap["cam_pos"], cap["cam_rot"]
-        leds = self.c.get_slot_leds(self.server)
-        h, w = depth.shape
-        out = {}
+        tray = self.vision.scan(cap, self.c.get_slot_leds(self.server),   # where LEDs / parts are: map knowledge
+                                self.c.get_slot_grasp_points(self.server))
+        leds = {}
         for i in range(len(self.bays)):
-            p = R.T @ (np.asarray(leds[self._slot(i)]) - pos)  # MuJoCo camera: looks down -Z, +Y up
-            if p[2] >= -0.05:
-                out[i] = ("unknown", None)
-                continue
-            u = K[0, 2] + K[0, 0] * p[0] / -p[2]
-            v = K[1, 2] - K[1, 1] * p[1] / -p[2]
-            ui, vi = int(round(u)), int(round(v))
-            r = 6                                      # the LED is ~10 px across at the view height
-            if not (r <= ui < w - r and r <= vi < h - r):
-                out[i] = ("unknown", None)
-                continue
-            # keep only pixels at the LED's own depth: parts of the LED can sit behind a RAM stick
-            win_d = depth[vi - r:vi + r + 1, ui - r:ui + r + 1]
-            win_c = rgb[vi - r:vi + r + 1, ui - r:ui + r + 1].astype(int)
-            on_led = np.abs(win_d - (-p[2])) < 0.012
-            if on_led.sum() < 4:
-                out[i] = ("unknown", (u, v))           # hidden: something is in front of it
-                continue
-            px = win_c[on_led]
-            px = px[np.argmax(px.max(axis=1) + (px.max(axis=1) - px.min(axis=1)))]  # brightest, most saturated
-            out[i] = (classify_led(px), (u, v))
-        return {"leds": out, "rgb": rgb}
+            s = tray.slots.get(self._slot(i))
+            led = "unknown" if s is None or s.led == "hidden" else s.led
+            leds[i] = (led, s.uv if s else None)
+        return {"leds": leds, "rgb": cap["rgb"], "tray": tray}
+
+    def _blocked_bays(self) -> set[int]:
+        tray = (self._scan or {}).get("tray")
+        if tray is None:
+            return set()
+        return {i for i in range(len(self.bays)) if getattr(tray.slots.get(self._slot(i)), "blocked", False)}
+
+    def _path_blocked(self, bay: int) -> str | None:
+        """Look at the tray and check the way down to `bay`. Returns a BLOCKED message or None."""
+        if not self._view():
+            return None
+        self._scan = self._read_leds()
+        if bay not in self._blocked_bays():
+            return None
+        # not stored in blocked_bay (the lidar's last stop): perceive() re-checks the camera every look
+        why = "; ".join(r for r in self._scan["tray"].slots[self._slot(bay)].reasons if "lying" in r)
+        self.events.append(f"camera reflex: gripper path to bay {bay} blocked")
+        return (f"BLOCKED: the wrist camera sees something in the gripper's path down to bay {bay} "
+                f"({self._slot(bay)}): {why}; not reaching in.")
 
     # ------------------------------------------------------------------ views
     def camera_png(self) -> bytes:
@@ -181,7 +206,9 @@ class DcsimRack(World):
             img = Image.fromarray(scan["rgb"])
             d = ImageDraw.Draw(img)
             d.rectangle([0, 0, img.width, 22], fill=(0, 0, 0))
-            d.text((6, 5), f"{self.server} tray, wrist camera | labels = on-robot LED reading", fill=(235, 235, 235))
+            d.text((6, 5), f"{self.server} tray, wrist camera | labels = on-robot perception (vision/tray.py)",
+                   fill=(235, 235, 235))
+            blocked = self._blocked_bays()
             for i, (led, uv) in scan["leds"].items():
                 if self.bays[i].caddy == "removed":
                     led = "none"
@@ -189,9 +216,14 @@ class DcsimRack(World):
                     continue
                 u, v = uv
                 col = LED_DRAW.get(led, (255, 255, 255))
-                d.ellipse([u - 8, v - 8, u + 8, v + 8], outline=col, width=2)
+                d.ellipse([u - 8, v - 8, u + 8, v + 8], outline=(255, 40, 40) if i in blocked else col, width=2)
                 d.text((u - 4, v - 24), str(i), fill=col)
+            for o in scan["tray"].obstacles:
+                x, y, w, h = o.bbox
+                d.rectangle([x, y, x + w, y + h], outline=(255, 40, 40), width=2)
+                d.text((x, max(24, y - 12)), f"OBSTACLE over {', '.join(o.over_slots)}", fill=(255, 60, 60))
             key = "  ".join(f"bay{i}={'none' if self.bays[i].caddy == 'removed' else led}"
+                            + ("[BLOCKED]" if i in blocked else "")
                             + ("<ARM" if self.arm_at == str(i) else "") for i, (led, _) in scan["leds"].items())
             d.rectangle([0, img.height - 20, img.width, img.height], fill=(0, 0, 0))
             d.text((6, img.height - 16), key, fill=(235, 235, 235))
@@ -211,25 +243,28 @@ class DcsimRack(World):
         return png
 
     def perceive(self):
-        """On-robot perception: LED per bay from the wrist camera (the last look if the tray is not
-        in view right now), thermal from the thermal image, obstructed = the lidar stopped the
-        robot on its way to that bay. The only non-camera input: a stick the robot itself removed."""
+        """On-robot perception (vision/tray.py on the wrist camera; the last look if the tray is not in
+        view right now): LED per bay, and obstructed = something lies in the gripper's way down to it
+        (camera) or the lidar stopped the robot on its way there. Thermal from the thermal image.
+        The only non-camera input: a stick the robot itself removed."""
         from perception import BayView, read_thermal
         self._sync_leds()
         if self._view():
             self._scan = self._read_leds()
         temps = read_thermal(self.thermal_png())
+        blocked = self._blocked_bays() if self._here() and self._tray_out() else set()
         views = []
         for i, b in enumerate(self.bays):
             led = "none" if b.caddy == "removed" else self._scan["leds"][i][0]
-            views.append(BayView(i, led, temps[i], self.blocked_bay == i))
+            views.append(BayView(i, led, temps[i], self.blocked_bay == i or i in blocked))
         return views
 
     # ---------------------------------------------------------------- actions
     def move_to(self, bay: int) -> str:
         if not 0 <= bay < len(self.bays) or self.stopped:
             return super().move_to(bay)
-        if self.obstacle_at is not None and not self._here() and not self.technician:
+        if (self.obstacle_mode == "aisle" and self.obstacle_at is not None and not self._here()
+                and not self.technician):
             st = self._status()["base"]
             rack_x = (int(self.server.split("-")[1]) - 1) * 0.61
             self.c.spawn_technician("block", x=round((st["x"] + rack_x) / 2, 2), delay=0.0, duration=3600.0)
@@ -244,9 +279,11 @@ class DcsimRack(World):
                 return (f"BLOCKED: lidar stopped the robot in the aisle on the way to bay {bay} "
                         f"({self.server}); it waited 20 s and the obstruction did not clear. Robot halted in place.")
             return f"ERROR: could not reach {self.server}: {err}"
+        blocked = self._path_blocked(bay)
+        if blocked:
+            return blocked
         self.blocked_bay = None
         self.arm_at = str(bay)
-        self._view()
         return f"OK: arm at bay {bay} (RAM slot {self._slot(bay)} of {self.server}, tray open)"
 
     def wait(self) -> str:
@@ -254,6 +291,9 @@ class DcsimRack(World):
         if self.technician and self.obstacle_at is None:
             self.c.clear_technician()
             self.technician = False
+        if self.cable and self.obstacle_at is None:
+            self.c.clear_cable()                 # someone tidied the cable away
+            self.cable = False
         self.c.step(WAIT_TICKS)
         return res
 
@@ -263,6 +303,9 @@ class DcsimRack(World):
         i = int(self.arm_at)
         if self.bays[i].caddy in ("removed", "jammed"):
             return super().pull_caddy()
+        blocked = self._path_blocked(i)          # look before reaching in: something may have landed since
+        if blocked:
+            return blocked
         r = self.c.pick(self._slot(i))
         if not r["ok"]:
             if "stuck" in r.get("error", ""):

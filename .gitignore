@@ -5,3 +5,5 @@ __pycache__/
 outputs/*
 !outputs/.gitkeep
 *.usd.bak
+team/
+integration/argon/runs/
