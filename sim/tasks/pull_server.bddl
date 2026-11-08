@@ -1,0 +1,13 @@
+(define (problem LIBERO_Tabletop_Manipulation)
+ (:domain robosuite)
+ (:language Pull out the server with the cyan handle)
+ (:regions (u21_region (:target data_center_rack_b_1)))
+ (:fixtures main_table - table
+ data_center_rack_a_1 - data_center_rack_a
+ data_center_rack_b_1 - data_center_rack_b
+ data_center_rack_c_1 - data_center_rack_c
+ data_center_rack_d_1 - data_center_rack_d)
+ (:objects)
+ (:obj_of_interest data_center_rack_b_1_u21_region)
+ (:init (Close data_center_rack_b_1_u21_region))
+ (:goal (And (Open data_center_rack_b_1_u21_region))))
