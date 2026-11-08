@@ -160,13 +160,14 @@ class DataCenterSim:
             elif g != floor and b not in part_bodies and b != m.body("technician").id and not any(under(b, t) for t in trays):
                 self.geom_scenery[g] = True
         self.mat = {n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MATERIAL, f"led_{n}")
-                    for n in ("ok", "fault", "identify", "off", "rebuild")}
+                    for n in ("ok", "fault", "identify", "off", "rebuild", "red")}
 
     def reset(self, seed: int | None = None, faults: list[tuple[str, str, str]] | None = None) -> dict:
         """Robot docked at the depot, all trays in, default faults (or a random set with `seed`).
         faults: list of (server_id, slot, fault), e.g. [("R1-05-U20", "A3", "dimm_uncorrectable")]."""
         m, d = self.m, self.d
         self.last_collision = None
+        self.led_override: dict[tuple[str, str], str] = {}
         mujoco.mj_resetData(m, d)
         self.q_cmd = Q_NOMINAL.copy()
         self.grip_cmd = GRIP_OPEN
@@ -602,8 +603,9 @@ class DataCenterSim:
     def gripper_width(self) -> float:
         return float(self.d.qpos[self.finger_qadr].sum())
 
-    def open_gripper(self) -> dict:
-        self.grip_cmd = GRIP_OPEN
+    def open_gripper(self, width: float | None = None) -> dict:
+        """Open fully, or only to `width` metres between the fingers (for tight spots)."""
+        self.grip_cmd = GRIP_OPEN if width is None else float(np.clip(width / 0.08, 0, 1) * GRIP_OPEN)
         if self._on_handle:
             self.d.eq_active[self.srv[self._on_handle]["handle_eq"]] = False
             self._latch_tray(self._on_handle, True)
@@ -952,6 +954,52 @@ class DataCenterSim:
             if p.kind == "fan":
                 ph = next(iter(self.health.values())).parts[pid]
                 self._set_led(f"{pid}_led", "fault" if ph.status != "ok" else "ok")
+        for (sid, slot), state in self.led_override.items():  # demo: an LED that shows the wrong thing
+            geom = self._led_geom(sid, slot)
+            if geom:
+                self._set_led(geom, state)
+
+    LED_NAMES = {"green": "ok", "ok": "ok", "amber": "fault", "fault": "fault", "red": "red", "off": "off",
+                 "blue": "identify", "identify": "identify"}
+
+    def _led_geom(self, server: str, slot: str) -> str | None:
+        if slot.startswith("A"):
+            return f"s{self.layout.servers[server].index}_led_{slot}"
+        pid = self.occupant(f"{server}:{slot}")
+        return f"{pid}_led" if pid else None
+
+    def set_led(self, server: str, slot: str, state: str | None) -> dict:
+        """Demo: force a slot's LED to show `state` (green/amber/red/off/blue) whatever the part's
+        health; None goes back to automatic. Fan LEDs follow the fan module that is in the slot."""
+        if server not in self.layout.servers:
+            raise ValueError(f"unknown server {server}")
+        key = (server, slot)
+        if state in (None, "auto"):
+            self.led_override.pop(key, None)
+        else:
+            if state not in self.LED_NAMES:
+                raise ValueError(f"state must be one of {sorted(self.LED_NAMES)} or None")
+            self.led_override[key] = self.LED_NAMES[state]
+        self._refresh_leds()
+        mujoco.mj_forward(self.m, self.d)
+        return {"server": server, "slot": slot, "led": state or "auto"}
+
+    def slot_leds(self, server: str) -> dict:
+        """World position of each slot's status LED (map knowledge, like a rack diagram)."""
+        out = {}
+        slots = [f"A{i}" for i in range(1, 9)] + [f"F{i}" for i in range(1, 6)]
+        for slot in slots:
+            g = self._led_geom(server, slot)
+            if g:
+                out[slot] = self.d.geom_xpos[self.m.geom(g).id].round(4).tolist()
+        return out
+
+    def clear_technician(self) -> dict:
+        """Demo: the technician walks out of the aisle now (after spawn_technician)."""
+        if self._tech_keys:
+            p = self.d.mocap_pos[self.tech_mocap][:2].copy()
+            self._tech_keys = [(self.time, p.tolist()), (self.time + 1.0, [float(p[0]), -0.75])]
+        return {"cleared": True}
 
     # ================================================================ sensing
     def render(self, camera: str = "wrist", width: int | None = None, height: int | None = None,

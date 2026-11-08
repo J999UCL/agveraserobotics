@@ -147,7 +147,7 @@ def build_spec(cfg: SimCfg | None = None) -> tuple[mujoco.MjSpec, Layout]:
     spec.stat.extent = 4.0
     for name, rgba, em in [("led_ok", [0.1, 1.0, 0.2, 1], 1.0), ("led_fault", [1.0, 0.45, 0.0, 1], 1.0),
                            ("led_identify", [0.2, 0.4, 1.0, 1], 1.0), ("led_off", [0.05, 0.05, 0.05, 1], 0.0),
-                           ("led_rebuild", [0.8, 1.0, 0.1, 1], 0.8), ("light_panel", [1, 1, 0.97, 1], 1.0),
+                           ("led_rebuild", [0.8, 1.0, 0.1, 1], 0.8), ("led_red", [1.0, 0.06, 0.06, 1], 1.0), ("light_panel", [1, 1, 0.97, 1], 1.0),
                            ("accent_glow", [0.1, 0.65, 1.0, 1], 0.9)]:
         spec.add_material(name=name, rgba=rgba, emission=em)
 

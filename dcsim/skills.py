@@ -17,6 +17,7 @@ from .sim import DataCenterSim, Stopped, rot_z
 
 SAFE_Z = 0.30  # transit height above the Franka base
 ABORT_FORCE_N = 25.0  # stop pulling a part above this (healthy parts unseat at ~12 N)
+RAM_OPEN_WIDTH = 0.035  # finger gap for parts in slots: full width (8 cm) hits the tray wall and neighbours
 
 
 class Skills:
@@ -184,15 +185,16 @@ class Skills:
             return self._result(False, error="go_home to the depot first")
         g = s.slot_grasp_point(key)
         down = self._down()
+        width = RAM_OPEN_WIDTH
         try:
-            s.open_gripper()
+            s.open_gripper(width)
             self._transit(g)
             s.move_tcp(g + [0, 0, 0.06], down, speed=0.15)
             s.move_tcp(g, down, speed=0.05)
             s.peak_force(reset=True)
             r = s.close_gripper()
             if r["holding"] != pid:
-                s.open_gripper()
+                s.open_gripper(width)
                 s.move_tcp(g + [0, 0, 0.08], down, speed=0.15)
                 return self._result(False, error="grasp missed", gripper=r)
             lifted = s.move_tcp(g + [0, 0, 0.12], down, speed=0.04, settle=0.1,
@@ -201,7 +203,7 @@ class Skills:
             if not lifted and s.guard_reason == "force":
                 f = s.pull_force()
                 s.move_tcp(g + [0, 0, 0.002], down, speed=0.02, settle=0.1)  # relieve tension first
-                s.open_gripper()
+                s.open_gripper(width)
                 s.move_tcp(g + [0, 0, 0.08], down, speed=0.15)
                 if sd.where == "tray":
                     s.health[sd.server].log("warning", f"{sd.name}: extraction aborted at {f:.1f} N (part stuck)", slot=sd.name)
@@ -234,7 +236,7 @@ class Skills:
             self._transit(g)
             s.move_tcp(g + [0, 0, 0.05], down, speed=0.15)
             s.move_tcp(g + [0, 0, 0.001], down, speed=0.03, settle=0.3)
-            s.open_gripper()
+            s.open_gripper(RAM_OPEN_WIDTH)
             s.move_tcp(g + [0, 0, 0.08], down, speed=0.15)
         except Stopped as e:
             return self._result(False, error=str(e) or "stopped")
@@ -251,11 +253,17 @@ class Skills:
         try:
             self._transit(s.to_world([bx, by, 0]), z_rel=0.26)
             s.open_gripper()
-            for _ in range(40):
+            for _ in range(150):  # wait for it to land (it can catch on a finger for a moment)
+                s.step()
+                if s.parts[pid].where == "bin":
+                    break
+            for _ in range(15):
                 s.step()
         except Stopped as e:
             return self._result(False, error=str(e) or "stopped")
-        return self._result(s.parts[pid].where == "bin", part=pid)
+        if s.parts[pid].where != "bin":
+            return self._result(False, part=pid, error=f"{pid} did not land in the returns bin")
+        return self._result(True, part=pid)
 
     def find_spare(self, kind: str) -> str | None:
         for slot, pid in self.sim.storage("onboard").items():

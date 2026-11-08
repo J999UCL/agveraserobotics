@@ -82,4 +82,7 @@ keeps the details. Touching trays and parts is part of the job and doesn't count
 | `inject_fault(server, slot, fault)` | `fault` is `dimm_uncorrectable`, `dimm_correctable`, `fan_failed` or `fan_degraded`. Opens a work order |
 | `set_jam(slot, server, on)` | makes the part in that slot stuck |
 | `spawn_technician(mode="cross"\|"block", x=None, delay=0, duration=4)` | a technician walks into the aisle ahead of the robot |
-| `reset(seed=None)` | everything back to the start; a seed randomizes the faults |
+| `set_led(server, slot, state)` | forces an LED to `green` / `amber` / `red` / `off` / `blue` whatever the part's health (a faulty LED); `None` = automatic. Python client only |
+| `get_slot_leds(server)` | world xyz of each slot's LED, for perception. Python client only |
+| `clear_technician()` | the technician leaves the aisle now. Python client only |
+| `reset(seed=None, faults=None)` | everything back to the start; a seed randomizes the faults; `faults=[]` gives a healthy data center (Python client) |

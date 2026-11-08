@@ -132,4 +132,16 @@ class SimClient:
     def get_lidar_scan(self) -> dict: return self.call("get_lidar_scan")
     def get_nav_log(self) -> list[dict]: return self.call("get_nav_log")
 
-    def reset(self, seed: int | None = None) -> dict: return self.call("reset", seed=seed)
+    def set_led(self, server: str, slot: str, state: str | None = None) -> dict:
+        """Demo: force an LED (green/amber/red/off/blue) regardless of health; None = automatic."""
+        return self.call("set_led", server=server, slot=slot, state=state)
+
+    def get_slot_leds(self, server: str) -> dict:
+        """World xyz of each slot's status LED on a server (A1-A8, F1-F5)."""
+        return self.call("get_slot_leds", server=server)
+
+    def clear_technician(self) -> dict: return self.call("clear_technician")
+
+    def reset(self, seed: int | None = None, faults: list | None = None) -> dict:
+        """faults: [[server, slot, fault], ...]; [] = a healthy data centre."""
+        return self.call("reset", seed=seed, faults=faults)

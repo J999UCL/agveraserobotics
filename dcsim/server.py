@@ -28,7 +28,7 @@ from .skills import Skills
 QUICK = {"ping", "get_status", "get_fleet_health", "get_server_health", "get_event_log", "get_work_orders",
          "get_events", "get_installed", "get_onboard_inventory", "get_depot_inventory", "list_servers",
          "capture_image", "get_camera_info", "pixel_to_world", "get_pull_force", "stop", "set_jam", "inject_fault",
-         "get_lidar_scan", "get_nav_log", "spawn_technician"}
+         "get_lidar_scan", "get_nav_log", "spawn_technician", "set_led", "get_slot_leds", "clear_technician"}
 
 
 def _jpeg(rgb: np.ndarray, quality: int = 85) -> str:
@@ -230,5 +230,8 @@ class SimServer:
             "set_jam": set_jam,
             "inject_fault": inject_fault,
             "spawn_technician": lambda mode="cross", x=None, delay=0.0, duration=4.0: s.spawn_technician(mode, x, delay, duration),
-            "reset": lambda seed=None: s.reset(seed=seed),
+            "set_led": lambda server, slot, state=None: s.set_led(server, slot, state),
+            "get_slot_leds": lambda server: s.slot_leds(server),
+            "clear_technician": s.clear_technician,
+            "reset": lambda seed=None, faults=None: s.reset(seed=seed, faults=[tuple(f) for f in faults] if faults is not None else None),
         }
