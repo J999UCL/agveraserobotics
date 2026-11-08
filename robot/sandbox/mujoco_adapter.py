@@ -8,10 +8,10 @@ Mapping (prototype):
   * pull_caddy        -> extend that server's tray under the rail service force;
                          JAMMED is detected PHYSICALLY (tray fails to travel)
   * insert_caddy      -> close the tray
-  * status LEDs       -> shown on each server's drive LEDs (perception/datacentre.py adds one
+  * status LEDs       -> shown on each server's drive LEDs (vision/datacentre.py adds one
                          controllable LED per drive carrier at load time; sim/ is not modified)
   * obstructions      -> a physical loose cable hung in front of the bay's drive latches
-  * perceive()        -> on-robot camera perception (perception/): LEDs found in the image and
+  * perceive()        -> on-robot camera perception (vision/): LEDs found in the image and
                          placed in 3D with depth, obstacles found from depth. Nothing is read from
                          the simulator's ground truth except "caddy removed", which the robot knows
                          because it pulled it itself.
@@ -25,8 +25,6 @@ not individually removable, so the "swap" is a tray-level service action.
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import io
 import os
 import sys
@@ -40,25 +38,10 @@ from world import World
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "sim"))
+sys.path.append(ROOT)  # repo root, for the vision/ package
 import run as simrun  # noqa: E402  (team's scene helpers: load, drive, settled)
-
-
-def _rack_perception(module: str):
-    """Load the repo-root perception package under another name: this folder already has a
-    perception.py (local pixel-reading helpers), so a plain `import perception` would clash."""
-    name = "rack_perception"
-    if name not in sys.modules:
-        pkg = os.path.join(ROOT, "perception")
-        spec = importlib.util.spec_from_file_location(name, os.path.join(pkg, "__init__.py"),
-                                                      submodule_search_locations=[pkg])
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[name] = mod
-        spec.loader.exec_module(mod)
-    return importlib.import_module(f"{name}.{module}")
-
-
-dc = _rack_perception("datacentre")
-project = _rack_perception("geometry").project
+from vision import datacentre as dc  # noqa: E402  (on-robot camera perception)
+from vision.geometry import project  # noqa: E402
 
 RACK = 4
 FIRST_SLOT = 6
@@ -83,6 +66,9 @@ class MujocoRack(World):
         # Where each server is (map knowledge, trays closed); where its fault is comes from the camera.
         self.server_targets = [dc.server_target(self.m, self.d, RACK, s) for s in slots]
         self.vision = dc.make_perception(self.m, self.d, step=4)
+        # one throwaway scan so OpenCV's one-off start-up cost isn't reported as frame latency
+        self.vision.scan_many(dc.capture(self.m, self.d, *self.view, width=VIEW_W, height=VIEW_H),
+                              self.server_targets)
         self.last_scans = None
         self._cache = None
 
@@ -160,11 +146,12 @@ class MujocoRack(World):
             u, vv, z = project(self.server_targets[i], cap.K, cap.T_base_cam)
             if u is None:
                 continue
-            x, y = 8, int(vv) + 6
             label = f"bay {i}: {led.upper()}" + ("  BLOCKED" if v["obstructed"] else "")
             if self.arm_at == str(i):
                 label += "  <ARM"
             (tw, th), _ = cv2.getTextSize(label, font, 0.55, 1)
+            left = min((b.uv[0] for b in sc.bays), default=u - 120)  # just left of this server's LEDs
+            x, y = max(4, int(left) - tw - 24), int(vv) + 6
             cv2.rectangle(img, (x - 4, y - th - 4), (x + tw + 4, y + 5), (0, 0, 0), -1)
             cv2.putText(img, label, (x, y), font, 0.55, col, 1, cv2.LINE_AA)
         for o in scans[0].obstacles:
