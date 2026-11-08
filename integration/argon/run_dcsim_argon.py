@@ -4,9 +4,10 @@ Copy dcsim_adapter.py and this file into robot/sandbox/ of the team repo, start 
 then from robot/sandbox/:
 
   DCSIM=localhost:5555 DCSIM_REPO=/path/to/AgentVerseBob2 python run_dcsim_argon.py --only clean_failure
-  ... --brain modal            # Argon on Modal (Gemini key stays in the Modal secret)
-  ... --brain gemini           # Argon called from here (needs GEMINI_API_KEY)
+  ... --brain modal            # optional: Argon on Modal (Gemini key stays in the Modal secret)
+  ... --brain gemini           # default: Argon called from here (needs GEMINI_API_KEY)
   ... --brain none             # local autopilot only: escalations end in the safe fallback
+  ... --brain gemini --model gemini-3.5-flash-lite   # a smaller model than the agent's default
   ... --mode argon             # Argon decides every step (default: local_first)
 
 Traces: runs/dcsim/<mode>_<scenario>.json, camera frames in runs/dcsim/<mode>_<scenario>/
@@ -57,9 +58,15 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--only", default="")
     p.add_argument("--mode", default="local_first", choices=["local_first", "argon"])
-    p.add_argument("--brain", default="modal", choices=["modal", "gemini", "none"])
+    p.add_argument("--brain", default="gemini", choices=["gemini", "modal", "none"])
     p.add_argument("--server", default="R1-05-U20")
+    p.add_argument("--model", default="", help="with --brain gemini: use this model instead of agent.MODEL")
     a = p.parse_args()
+    if a.model:
+        if a.brain != "gemini":
+            p.error("--model needs --brain gemini (the Modal app has its own model setting)")
+        import agent
+        agent.MODEL = a.model
     names = a.only.split(",") if a.only else list(SCENARIOS)
     runner = run_local_first if a.mode == "local_first" else run
     brain, ctx = make_brain(a.brain)

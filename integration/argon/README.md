@@ -24,8 +24,8 @@ DCSIM=localhost:5555 DCSIM_REPO=/path/to/AgentVerseBob2 python run_dcsim_argon.p
 
 | Option | Meaning |
 |---|---|
-| `--brain modal` (default) | Argon on Modal; the Gemini key stays in the Modal secret |
-| `--brain gemini` | Argon called from this machine; needs `GEMINI_API_KEY` |
+| `--brain gemini` (default) | Argon called from this machine; needs `GEMINI_API_KEY` |
+| `--brain modal` | optional: Argon on Modal; the Gemini key stays in the Modal secret |
 | `--brain none` | autopilot only; anything it escalates ends in the safe fallback |
 | `--mode argon` | Argon decides every step (default `local_first`) |
 | `--server R2-03-U14` | which server the 8 bays live on |
@@ -75,4 +75,4 @@ DCSIM=localhost:5555 DCSIM_REPO=/path/to/AgentVerseBob2 python -m pytest test_dc
 |---|---|
 | 12 scenarios, autopilot only | same outcome as the toy world: 6 pass (`clean_failure`, `obstacle`, `raid_rebuild`, `no_spares`, `two_failures`, `same_group_double`); 6 escalate to Argon and stop safely |
 | 7 scripted-decision tests | pass: swap, physical jam, two failures, technician in the aisle, dead spare, restock trip, LED reading |
-| Real Gemini | not tested |
+| Real Gemini (`gemini-4-argon`), one run each | the 6 escalating scenarios pass (`misleading_led`, `jammed_caddy`, `false_alarm_heat`, `doa_spare`, `smart_false_alarm`, `smart_silent`), 2-6 model calls and 21-75 s of model time each |
