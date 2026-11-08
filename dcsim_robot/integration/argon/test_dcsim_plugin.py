@@ -89,3 +89,37 @@ def test_perception_reads_leds_from_camera():
         w = rack(name)
         assert [v.led for v in w.perceive()] == [b.led for b in w.bays]
         w.c.close()
+
+
+# ---------------------------------------------------------------- wrist-camera path check (vision/)
+def test_cable_over_the_tray_is_seen_by_the_wrist_camera():
+    """obstacle_mode="tray": a loose cable lies over bay 7's stick. Nothing physical stops the arm;
+    the wrist camera has to see it in the gripper's path, and only bay 7 may be flagged."""
+    w = DcsimRack(SCENARIOS["obstacle"][0](), obstacle_mode="tray")
+    views = w.perceive()
+    assert [v.bay for v in views if v.obstructed] == [7]
+    assert views[7].led == "red"                        # the fault LED is still read through
+    r = w.move_to(7)
+    assert r.startswith("BLOCKED") and "wrist camera" in r
+    w.wait()
+    w.wait()                                           # the scenario's obstruction clears after 2 waits
+    assert not any(v.obstructed for v in w.perceive())
+    assert w.move_to(7).startswith("OK")
+    w.close()
+
+
+def test_autopilot_waits_for_cable_then_swaps():
+    w = DcsimRack(SCENARIOS["obstacle"][0](), obstacle_mode="tray")
+    t = run_local_first(w, NeverBrain(), verbose=False)
+    assert grade("obstacle", w)["passed"] and t.model_calls == 0
+    assert any("camera reflex" in e for e in w.events) or any(s["result"].startswith("BLOCKED") for s in t.steps) \
+        or any(v for v in []), w.events
+    w.close()
+
+
+def test_camera_check_finds_nothing_on_a_clean_tray():
+    w = rack("clean_failure")
+    w.perceive()
+    tray = w._scan["tray"]
+    assert not tray.obstacles and not any(s.blocked for s in tray.slots.values()), tray.summary()
+    w.close()

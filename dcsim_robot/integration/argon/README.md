@@ -76,3 +76,18 @@ DCSIM=localhost:5555 DCSIM_REPO=/path/to/AgentVerseBob2 python -m pytest test_dc
 | 12 scenarios, autopilot only | same outcome as the toy world: 6 pass (`clean_failure`, `obstacle`, `raid_rebuild`, `no_spares`, `two_failures`, `same_group_double`); 6 escalate to Argon and stop safely |
 | 7 scripted-decision tests | pass: swap, physical jam, two failures, technician in the aisle, dead spare, restock trip, LED reading |
 | Real Gemini | not tested |
+
+## Camera perception (vision/)
+
+`perceive()` and the pre-pick check use `vision/tray.py` from the team repo, found automatically
+when this file sits inside the team repo; otherwise set `VISION_REPO`. One wrist frame over the
+open tray gives:
+
+- **LED per bay.** Glowing blobs are matched to each slot's known LED position (`get_slot_leds`), and lights that aren't slot LEDs are ignored. A missing LED is reported as "hidden" (depth shows something in front of it) or "off" (empty slot). Lime, a new part settling in, is reported as "verifying", never a fault.
+- **Blocked slots.** Depth is used to check whether anything lies in the gripper's way down to each part (`get_slot_grasp_points`). Slots blocked by the same object are grouped into one obstacle.
+
+**Two obstacle modes:**
+- **`DcsimRack(..., obstacle_mode="aisle")` (default):** the `obstacle` scenario is a technician in the aisle, and the **lidar** stops the robot.
+- **`obstacle_mode="tray"`:** a loose cable lands across the open tray over the bay (`drop_cable`). Nothing physical stops the arm; the **wrist camera** sees it, so `move_to` and `pull_caddy` return `BLOCKED` until it's cleared.
+
+The camera check before every pick is on in both modes.

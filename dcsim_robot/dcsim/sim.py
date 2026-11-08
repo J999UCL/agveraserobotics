@@ -118,6 +118,7 @@ class DataCenterSim:
         self.depot_body = m.body("depot").id
         self.chassis_mocap = m.body_mocapid[m.body("chassis").id]
         self.tech_mocap = m.body_mocapid[m.body("technician").id]
+        self.cable_mocap = m.body_mocapid[m.body("loose_cable").id]
         self.lidar_adr = m.sensor_adr[m.sensor("lidar_00").id]
         self.tcp_site = m.site("tcp").id
         self.srv = {}
@@ -157,7 +158,8 @@ class DataCenterSim:
             b = m.geom_bodyid[g]
             if root(b) in robot_roots:
                 self.geom_robot[g] = True
-            elif g != floor and b not in part_bodies and b != m.body("technician").id and not any(under(b, t) for t in trays):
+            elif (g != floor and b not in part_bodies and b not in (m.body("technician").id, m.body("loose_cable").id)
+                  and not any(under(b, t) for t in trays)):
                 self.geom_scenery[g] = True
         self.mat = {n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MATERIAL, f"led_{n}")
                     for n in ("ok", "fault", "identify", "off", "rebuild", "red")}
@@ -202,6 +204,7 @@ class DataCenterSim:
         self.work_orders: list[dict] = []
         self.nav_log: list[dict] = []
         self._tech_keys = None
+        self.clear_cable()
         if seed is not None:
             r = np.random.default_rng(seed)
             sids = list(self.layout.servers)
@@ -993,6 +996,32 @@ class DataCenterSim:
             if g:
                 out[slot] = self.d.geom_xpos[self.m.geom(g).id].round(4).tolist()
         return out
+
+    def slot_grasp_points(self, server: str) -> dict:
+        """World position the gripper closes on for each slot (A1-A8, F1-F5): map knowledge, like
+        slot_leds, so perception can check the path to it."""
+        slots = [f"A{i}" for i in range(1, 9)] + [f"F{i}" for i in range(1, 6)]
+        return {s: self.slot_grasp_point(f"{server}:{s}").round(4).tolist()
+                for s in slots if f"{server}:{s}" in self.layout.slots}
+
+    def drop_cable(self, server: str, slot: str, height: float = 0.07) -> dict:
+        """Demo: a loose patch cable lands across the open tray, lying along `slot` `height` m above the
+        part, right in the gripper's way. Nothing physical stops the arm: only the camera can catch it."""
+        g = self.slot_grasp_point(f"{server}:{slot}")
+        a1, a8 = (self.slot_grasp_point(f"{server}:A{i}") for i in (1, 8))
+        row = (a8 - a1) / max(np.linalg.norm(a8 - a1), 1e-9)       # the DIMM row direction
+        axis = np.cross(row, [0, 0, 1.0])                         # lie along the slot, across the row
+        yaw = float(np.arctan2(axis[1], axis[0]))
+        self.d.mocap_pos[self.cable_mocap] = g + [0, 0, height]
+        self.d.mocap_quat[self.cable_mocap] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
+        mujoco.mj_forward(self.m, self.d)
+        return {"cable": [server, slot], "height_m": height}
+
+    def clear_cable(self) -> dict:
+        """Demo: the loose cable is picked up and out of the way."""
+        self.d.mocap_pos[self.cable_mocap] = [0, 0, -10]
+        mujoco.mj_forward(self.m, self.d)
+        return {"cleared": True}
 
     def clear_technician(self) -> dict:
         """Demo: the technician walks out of the aisle now (after spawn_technician)."""
