@@ -18,24 +18,29 @@ def _colour(h: float) -> str | None:
 
 def find_leds(rgb: np.ndarray, min_area: int = 3, max_area: int = 600, glow_v: int = 250,
               glow_px: int = 2) -> list[tuple[str, float, float]]:
-    """Returns [(colour, u, v)]. One pass: bright+saturated mask -> blobs -> median hue per blob.
+    """Returns [(colour, u, v)]. Bright+saturated mask -> blobs -> per-blob circular-mean hue,
+    all vectorised (a rack front can show hundreds of LEDs).
     A lit LED saturates the sensor (V = 255 over several pixels); shiny coloured plastic catching
     the light (e.g. blue drive latches) peaks lower, so a blob needs `glow_px` pixels >= `glow_v`."""
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
-    mask = ((hsv[..., 2] >= 200) & (hsv[..., 1] >= 120)).astype(np.uint8)
-    n, labels, stats, cents = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    mask = (hsv[..., 2] >= 200) & (hsv[..., 1] >= 120)
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return []
+    lab = labels[mask]
+    hue = hsv[..., 0][mask].astype(np.float64)
+    val = hsv[..., 2][mask]
+    glow = np.bincount(lab, weights=(val >= glow_v).astype(np.float64), minlength=n)
+    ang = hue * (np.pi / 90.0)  # OpenCV hue 0..180 -> 0..2pi (red wraps around)
+    c = np.bincount(lab, weights=np.cos(ang), minlength=n)
+    s = np.bincount(lab, weights=np.sin(ang), minlength=n)
+    mean_h = (np.degrees(np.arctan2(s, c)) % 360.0) / 2.0
+    area = stats[:, cv2.CC_STAT_AREA]
+    ok = (area >= min_area) & (area <= max_area) & (glow >= glow_px)
+    ok[0] = False
     out = []
-    for i in range(1, n):
-        if not (min_area <= stats[i, cv2.CC_STAT_AREA] <= max_area):
-            continue
-        x, y, w, h = (stats[i, k] for k in (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
-        sel = labels[y:y + h, x:x + w] == i
-        if int((hsv[y:y + h, x:x + w, 2][sel] >= glow_v).sum()) < glow_px:
-            continue  # reflection, not a light
-        hue = hsv[y:y + h, x:x + w, 0][sel].astype(np.int32)
-        # red wraps around 180, so measure it on a shifted scale
-        med = float(np.median((hue + 90) % 180) - 90) % 180 if np.mean((hue < 10) | (hue > 170)) > 0.5 else float(np.median(hue))
-        c = _colour(med)
-        if c:
-            out.append((c, float(cents[i][0]), float(cents[i][1])))
+    for i in np.nonzero(ok)[0]:
+        col = _colour(float(mean_h[i]))
+        if col:
+            out.append((col, float(cents[i][0]), float(cents[i][1])))
     return out
