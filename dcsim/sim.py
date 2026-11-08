@@ -947,7 +947,7 @@ class DataCenterSim:
                 ph = self.health[sid].parts[pid]
                 any_fault |= ph.status != "ok"
                 if slot.startswith("A"):
-                    st = "rebuild" if ph.pending_post > 0 else ("fault" if ph.status != "ok" else "off")
+                    st = "rebuild" if ph.pending_post > 0 else ("fault" if ph.status != "ok" else "ok")
                     self._set_led(f"{pfx}led_{slot}", st)
             self._set_led(f"{pfx}status_led", "fault" if any_fault else "ok")
         for pid, p in self.parts.items():
