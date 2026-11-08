@@ -68,3 +68,26 @@ def test_local_first_autopilot_on_mujoco():
     assert grade("clean_failure", w)["passed"] and t.model_calls == 0
     assert w.tray_pos(5) < 0.03
     w.close()
+
+
+def test_obstruction_is_seen_by_the_camera_not_read_from_the_world():
+    """The loose cable is physically in the scene; perception has to find it in depth, and only the
+    bay it hangs in front of may be flagged. When it's gone, nothing is flagged."""
+    w = MujocoRack(SCENARIOS["obstacle"][0]())
+    views = w.perceive()
+    assert [v.bay for v in views if v.obstructed] == [7]
+    assert views[7].led == "red"                      # the cable doesn't hide the fault LED
+    assert any(o.clearance_m > 0.1 for o in w.last_scans[0].obstacles)
+    w.obstacle_at = None
+    assert not any(v.obstructed for v in w.perceive())
+    w.obstacle_at = 2
+    assert [v.bay for v in w.perceive() if v.obstructed] == [2]
+    w.close()
+
+
+def test_camera_image_is_annotated_from_perception():
+    w = MujocoRack(SCENARIOS["obstacle"][0]())
+    png = w.camera_png()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert all(len(sc.bays) == 8 for sc in w.last_scans or w._look()[1])   # all 8 drive LEDs per server
+    w.close()

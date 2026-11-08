@@ -16,10 +16,11 @@ def _colour(h: float) -> str | None:
     return None
 
 
-def find_leds(rgb: np.ndarray, min_area: int = 3, max_area: int = 600, glow_v: int = 240) -> list[tuple[str, float, float]]:
+def find_leds(rgb: np.ndarray, min_area: int = 3, max_area: int = 600, glow_v: int = 250,
+              glow_px: int = 2) -> list[tuple[str, float, float]]:
     """Returns [(colour, u, v)]. One pass: bright+saturated mask -> blobs -> median hue per blob.
-    A lit LED saturates the sensor (V close to 255); shiny coloured plastic catching the light
-    (e.g. blue drive latches) peaks lower, so blobs must reach `glow_v` somewhere."""
+    A lit LED saturates the sensor (V = 255 over several pixels); shiny coloured plastic catching
+    the light (e.g. blue drive latches) peaks lower, so a blob needs `glow_px` pixels >= `glow_v`."""
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
     mask = ((hsv[..., 2] >= 200) & (hsv[..., 1] >= 120)).astype(np.uint8)
     n, labels, stats, cents = cv2.connectedComponentsWithStats(mask, connectivity=8)
@@ -29,7 +30,7 @@ def find_leds(rgb: np.ndarray, min_area: int = 3, max_area: int = 600, glow_v: i
             continue
         x, y, w, h = (stats[i, k] for k in (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
         sel = labels[y:y + h, x:x + w] == i
-        if hsv[y:y + h, x:x + w, 2][sel].max() < glow_v:
+        if int((hsv[y:y + h, x:x + w, 2][sel] >= glow_v).sum()) < glow_px:
             continue  # reflection, not a light
         hue = hsv[y:y + h, x:x + w, 0][sel].astype(np.int32)
         # red wraps around 180, so measure it on a shifted scale

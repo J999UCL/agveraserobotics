@@ -59,16 +59,18 @@ class Scan:
     def bay(self, i: int) -> BayObs | None:
         return next((b for b in self.bays if b.bay == i), None)
 
-    def path_blocked(self, b: BayObs, corridor: float = 0.08) -> bool:
-        """Is anything in the gripper's approach corridor in front of this bay (or hiding its LED)?"""
+    def path_blocked(self, b: BayObs, corridor: float = 0.08, corridor_z: float | None = None) -> bool:
+        """Is anything in the gripper's approach corridor in front of this bay (or hiding its LED)?
+        corridor / corridor_z: half-width / half-height of the gripper's approach path."""
         if b.led == "hidden":
             return True
         if not self.rack_right or not self.obstacles:
             return False
+        cz = corridor if corridor_z is None else corridor_z
         p = np.asarray(b.tab_xyz_base)
         s = float(p @ np.asarray(self.rack_right))
         return any(o.span_s[0] - corridor <= s <= o.span_s[1] + corridor
-                   and o.span_z[0] - corridor <= p[2] <= o.span_z[1] + corridor for o in self.obstacles)
+                   and o.span_z[0] - cz <= p[2] <= o.span_z[1] + cz for o in self.obstacles)
 
     def faults(self) -> list[BayObs]:
         return [b for b in self.bays if b.status == "fault"]
@@ -164,6 +166,11 @@ class HotSwapPerception:
         """target_xyz: centre of the server's drive area in the base frame (map knowledge, allowed by
         api.md). When given, only that server's LEDs are used, so servers above/below don't confuse
         the bay numbering. Without it, every LED on the rack face is used."""
+        return self.scan_many(cap, [target_xyz])[0]
+
+    def scan_many(self, cap: Capture, targets: list) -> list[Scan]:
+        """One frame, several servers: the rack face and obstacles are found once, then each target
+        server's bays are read. Returns one Scan per target (obstacles shared)."""
         t0 = time.perf_counter()
         notes: list[str] = []
         P, valid = base_points(cap, self.step)  # half resolution is plenty for planes and obstacles
@@ -176,38 +183,62 @@ class HotSwapPerception:
         f_h = f - (f @ up) * up
         if np.linalg.norm(f_h) < 0.3:
             notes.append("camera is looking too steeply up/down to see a rack face")
-            return Scan([], [], None, None, (time.perf_counter() - t0) * 1000, notes)
+            return [Scan([], [], None, None, (time.perf_counter() - t0) * 1000, list(notes)) for _ in targets]
         f_h /= np.linalg.norm(f_h)
         r_h = np.cross(f_h, up)
 
-        plane = self._rack_plane(P[valid], cam, f_h, r_h)
+        leds_all = self._led_points(cap)
+        plane = self._rack_plane(P[valid], cam, f_h, r_h, np.array([l[3] for l in leds_all]) if leds_all else None)
         if plane is None:
             notes.append("couldn't find the rack face: move so the server fills more of the view")
-            return Scan([], [], None, None, (time.perf_counter() - t0) * 1000, notes)
+            return [Scan([], [], None, None, (time.perf_counter() - t0) * 1000, list(notes)) for _ in targets]
         n, d = plane
         dist = P @ n + d  # >0 = in front of the rack face (towards the robot)
         # From here on use the rack's own axes (orthonormal, horizontal): "in" and "right" along the face.
         f_h = -n - (-n @ up) * up
         f_h /= np.linalg.norm(f_h)
         r_h = np.cross(f_h, up)
-        bays, led_pts = self._bays(cap, n, d, notes, f_h, r_h, target_xyz)
-        if len(led_pts):  # watch for obstacles over this server's drive area
-            sz = np.column_stack([led_pts @ r_h, led_pts[:, 2]])
-            lo, hi = sz.min(axis=0) - 0.06, sz.max(axis=0) + 0.06
+        per_target = []
+        for target in targets:
+            tnotes = list(notes)
+            bays, led_pts = self._bays(cap, n, d, tnotes, f_h, r_h, target, leds_all)
+            per_target.append((bays, led_pts, tnotes))
+        all_leds = [p for _, pts, _ in per_target for p in pts]
+        if all_leds:  # watch for obstacles over the drive areas we're looking at
+            pts = np.array(all_leds)
+            sz = np.column_stack([pts @ r_h, pts[:, 2]])
+            pad = np.array([0.10, 0.06])  # wider sideways: latches/handles sit beside the LEDs
+            lo, hi = sz.min(axis=0) - pad, sz.max(axis=0) + pad
         else:
             on_face = valid & (np.abs(dist) < 0.012)
             sz = np.column_stack([P[on_face] @ r_h, P[on_face][:, 2]])
             lo, hi = np.percentile(sz, 1, axis=0), np.percentile(sz, 99, axis=0)
         obstacles = self._obstacles(cap, P, valid, dist, lo, hi, r_h)
-        return Scan(bays, obstacles, [round(float(v), 4) for v in n], round(float(d), 4),
-                    (time.perf_counter() - t0) * 1000, notes, [round(float(v), 5) for v in r_h])
+        ms = (time.perf_counter() - t0) * 1000
+        nl, rl = [round(float(v), 4) for v in n], [round(float(v), 5) for v in r_h]
+        return [Scan(bays, obstacles, nl, round(float(d), 4), ms, tnotes, rl) for bays, _, tnotes in per_target]
 
     # ------------------------------------------------------------------ rack face
+    def _led_points(self, cap: Capture) -> list:
+        """Every glowing LED in the frame with its 3D position (base frame): [(colour, u, v, xyz)]."""
+        out = []
+        R, t = cap.T_base_cam[:3, :3], cap.T_base_cam[:3, 3]
+        for colour, u, v in find_leds(cap.rgb):
+            z = depth_at(cap.depth, u, v, r=1)
+            if z is None:
+                continue
+            pc = np.array([(u - cap.K[0, 2]) * z / cap.K[0, 0], (v - cap.K[1, 2]) * z / cap.K[1, 1], z])
+            out.append((colour, u, v, R @ pc + t))
+        return out
+
     def _rack_plane(self, pts: np.ndarray, cam: np.ndarray, f_h: np.ndarray, r_h: np.ndarray,
-                    bin_m: float = 0.004, min_frac: float = 0.04, tol: float = 0.008):
-        """The cart stops square to the cabinet, so the server front shows up as a sharp peak in the
-        histogram of distance along the viewing direction. Take the NEAREST strong peak (cabinets /
-        walls behind it can be bigger), then refine with a least-squares plane so small tilts are handled."""
+                    led_pts: np.ndarray | None = None, bin_m: float = 0.004, min_frac: float = 0.04,
+                    tol: float = 0.008):
+        """The cart stops square to the cabinet, so flat surfaces facing the robot show up as sharp
+        peaks in the histogram of distance along the viewing direction. Candidates: every strong,
+        wide peak. Choose the one the status LEDs sit on (server handles in front and cabinet walls
+        behind can be bigger); without LEDs, the nearest. Refined with a least-squares plane."""
+        cands = []
         if len(pts) < 500:
             return None
         x = pts @ f_h
@@ -252,19 +283,19 @@ class HotSwapPerception:
                 continue
             if n @ (cam - c) < 0:
                 n = -n
-            return n, float(-n @ c)
-        return None
+            if led_pts is None:
+                return n, float(-n @ c)  # nearest strong peak
+            cands.append((int((np.abs(led_pts @ n - n @ c) < 0.025).sum()), -len(cands), n, float(-n @ c)))
+        if not cands:
+            return None
+        _, _, n, d = max(cands, key=lambda k: (k[0], k[1]))  # most LEDs on it, then nearest
+        return n, d
 
     # ------------------------------------------------------------------ bays from LEDs
-    def _bays(self, cap: Capture, n, d, notes, f_h, r_h, target_xyz=None):
+    def _bays(self, cap: Capture, n, d, notes, f_h, r_h, target_xyz=None, leds_all=None):
         leds = []
         t = None if target_xyz is None else np.asarray(target_xyz, float)
-        for colour, u, v in find_leds(cap.rgb):
-            z = depth_at(cap.depth, u, v, r=1)
-            if z is None:
-                continue
-            pc = np.array([(u - cap.K[0, 2]) * z / cap.K[0, 0], (v - cap.K[1, 2]) * z / cap.K[1, 1], z])
-            p = cap.T_base_cam[:3, :3] @ pc + cap.T_base_cam[:3, 3]
+        for colour, u, v, p in (leds_all if leds_all is not None else self._led_points(cap)):
             if abs(p @ n + d) > 0.025:  # LEDs sit on the rack face
                 continue
             if t is not None and (abs(p[2] - t[2]) > self.window_z or abs((p - t) @ r_h) > self.window_s):

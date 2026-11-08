@@ -1,7 +1,7 @@
 """Perception on the team's MuJoCo data centre: a faulty drive, then the same with a dropped cable.
 
-    python -m perception.demo                       # rack 2, server slot 6, bay 5 faulty
-    python -m perception.demo --rack 3 --slot 12 --bay 2
+    python -m vision.demo                       # rack 2, server slot 6, bay 5 faulty
+    python -m vision.demo --rack 3 --slot 12 --bay 2
 
 Saves annotated camera images and JSON to out/ and prints what the agent would receive.
 """

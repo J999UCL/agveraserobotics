@@ -12,5 +12,5 @@ robot/sandbox/runs/
 
 # perception outputs and generated textures
 out/
-perception/_assets/
+vision/_assets/
 .pytest_cache/

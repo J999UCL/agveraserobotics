@@ -8,8 +8,14 @@ Mapping (prototype):
   * pull_caddy        -> extend that server's tray under the rail service force;
                          JAMMED is detected PHYSICALLY (tray fails to travel)
   * insert_caddy      -> close the tray
-  * LEDs              -> the server's two front handles are recoloured per status
-  * camera_png        -> MuJoCo render of rack R04's front
+  * status LEDs       -> shown on each server's drive LEDs (perception/datacentre.py adds one
+                         controllable LED per drive carrier at load time; sim/ is not modified)
+  * obstructions      -> a physical loose cable hung in front of the bay's drive latches
+  * perceive()        -> on-robot camera perception (perception/): LEDs found in the image and
+                         placed in 3D with depth, obstacles found from depth. Nothing is read from
+                         the simulator's ground truth except "caddy removed", which the robot knows
+                         because it pulled it itself.
+  * camera_png        -> MuJoCo render of rack R04's front, annotated with what perception found
   * thermal_png       -> synthetic (MuJoCo has no thermal camera), from server state
   * SMART / RAID      -> logical server state inherited from World (not physics)
 
@@ -19,58 +25,71 @@ not individually removable, so the "swap" is a tray-level service action.
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import io
 import os
 import sys
 
+import cv2
 import mujoco
 import numpy as np
 from PIL import Image
 
-from world import LED_RGB, World
+from world import World
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "sim"))
 import run as simrun  # noqa: E402  (team's scene helpers: load, drive, settled)
 
+
+def _rack_perception(module: str):
+    """Load the repo-root perception package under another name: this folder already has a
+    perception.py (local pixel-reading helpers), so a plain `import perception` would clash."""
+    name = "rack_perception"
+    if name not in sys.modules:
+        pkg = os.path.join(ROOT, "perception")
+        spec = importlib.util.spec_from_file_location(name, os.path.join(pkg, "__init__.py"),
+                                                      submodule_search_locations=[pkg])
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+    return importlib.import_module(f"{name}.{module}")
+
+
+dc = _rack_perception("datacentre")
+project = _rack_perception("geometry").project
+
 RACK = 4
 FIRST_SLOT = 6
 OPEN, CLOSED = 0.70, 0.0
 SERVICE_STEPS = 1500      # 3 s of sim time per tray move
-
-
-def _hue_class(rgb) -> str | None:
-    """Status colour of a lit pixel by hue; None for grey/dark rack pixels."""
-    import colorsys
-    h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in rgb))
-    if s < 0.45 or v < 0.25:
-        return None
-    h *= 360
-    if 80 <= h <= 170:
-        return "green"
-    if 25 <= h < 70:
-        return "amber"
-    if h < 15 or h > 340:
-        return "red"
-    return None
+VIEW_W, VIEW_H = 1280, 960
+VIEW_STANDOFF = 1.1       # further back than a fully extended tray (0.72 m), so it never blocks the view
+AGENT_IMAGE = (960, 720)  # size of the annotated image handed to the agent
+LED_BGR = {"green": (60, 220, 90), "amber": (255, 170, 0), "red": (255, 50, 50), "blue": (80, 160, 255),
+           "off": (150, 150, 150), "unknown": (200, 200, 200), "none": (120, 120, 120)}
 
 
 class MujocoRack(World):
     def __init__(self, base: World, frames_dir: str | None = None):
         super().__init__(**{k: getattr(base, k) for k in base.__dataclass_fields__})
-        self.m, self.d = simrun.load()
+        self.m, self.d = dc.load(cable_mocap=True)
         self.targets: dict[str, float] = {}
         self.frames_dir = frames_dir
         self.frame_no = 0
-        self.renderer = mujoco.Renderer(self.m, height=480, width=640)
-        self.cam = mujoco.MjvCamera()
-        mid = (self.d.body(self._ident(0)).xpos + self.d.body(self._ident(7)).xpos) / 2
-        self.cam.lookat[:] = [mid[0], -0.5, mid[2]]
-        self.cam.distance, self.cam.azimuth, self.cam.elevation = 2.2, 90.0, -5.0
-        self.opt = mujoco.MjvOption()
-        self.opt.geomgroup[3] = 0
+        slots = [self._slot(i) for i in range(len(self.bays))]
+        self.view = dc.rack_view_pose(self.m, self.d, RACK, slots, standoff=VIEW_STANDOFF)
+        # Where each server is (map knowledge, trays closed); where its fault is comes from the camera.
+        self.server_targets = [dc.server_target(self.m, self.d, RACK, s) for s in slots]
+        self.vision = dc.make_perception(self.m, self.d, step=4)
+        self.last_scans = None
+        self._cache = None
 
     # ---------------------------------------------------------------- mapping
+    def _slot(self, bay: int) -> int:
+        return FIRST_SLOT + bay
+
     def _ident(self, bay: int) -> str:
         return f"r{RACK:02}_u{(FIRST_SLOT + bay) * 2 + 1:02}"
 
@@ -86,13 +105,15 @@ class MujocoRack(World):
             simrun.drive(self.m, self.d, self.targets)
         return simrun.settled(self.m, self.d, {self._joint(bay): target}, 0.02)
 
-    def _sync_leds(self):
+    def _sync_scene(self):
+        """Put the world's state into the physical scene: drive LEDs and the loose cable."""
         for i, b in enumerate(self.bays):
-            rgba = [c / 255 for c in LED_RGB[b.led]] + [1.0]
-            for side in (-1, 1):
-                gid = self.m.geom(f"{self._ident(i)}_handle_{side}").id
-                self.m.geom_matid[gid] = -1
-                self.m.geom_rgba[gid] = rgba
+            dc.show_server_status(self.m, RACK, self._slot(i), b.led)
+        if self.obstacle_at is None:
+            dc.park_cable(self.m, self.d)
+        else:
+            dc.place_cable(self.m, self.d, RACK, self._slot(self.obstacle_at))
+        mujoco.mj_forward(self.m, self.d)
 
     def _save_frame(self, png: bytes, tag: str):
         if self.frames_dir:
@@ -102,77 +123,70 @@ class MujocoRack(World):
                 f.write(png)
 
     # ------------------------------------------------------------------ views
+    def _look(self):
+        """Render the rack camera (RGB + depth) and run on-robot perception on it."""
+        self._sync_scene()
+        key = (round(float(self.d.time), 6), tuple(b.led for b in self.bays), self.obstacle_at,
+               tuple(round(self.tray_pos(i), 3) for i in range(len(self.bays))))
+        if self._cache is None or self._cache[0] != key:
+            cap = dc.capture(self.m, self.d, *self.view, width=VIEW_W, height=VIEW_H)
+            self._cache = (key, cap, self.vision.scan_many(cap, self.server_targets))
+        return self._cache[1], self._cache[2]
+
     def camera_png(self) -> bytes:
-        self._sync_leds()
-        mujoco.mj_forward(self.m, self.d)
-        self.renderer.update_scene(self.d, camera=self.cam, scene_option=self.opt)
-        img = Image.fromarray(self.renderer.render())
-        self._overlay(img)
+        cap, scans = self._look()
+        img = Image.fromarray(self._annotate(cap, scans)).resize(AGENT_IMAGE, Image.LANCZOS)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         png = buf.getvalue()
         self._save_frame(png, "camera")
         return png
 
-    def _overlay(self, img: Image.Image):
-        """Bay labels, arm position and obstruction markers, placed from known geometry
-        (like an AR overlay). Kept clear of the handles that local perception samples."""
-        from PIL import ImageDraw
-        d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, 330, 16], fill=(0, 0, 0))
-        d.text((4, 3), "rack R04 front camera  (labels = overlay)", fill=(230, 230, 230))
-        for i in range(len(self.bays)):
-            ul, v, _ = self._project(self.d.geom_xpos[self.m.geom(f"{self._ident(i)}_handle_-1").id])
-            ur, _, _ = self._project(self.d.geom_xpos[self.m.geom(f"{self._ident(i)}_handle_1").id])
-            y = int(v) - 6
-            d.rectangle([int(ul) - 52, y - 1, int(ul) - 10, y + 11], fill=(0, 0, 0))
-            d.text((int(ul) - 50, y), f"bay {i}", fill=(255, 255, 255))
-            x = int(ur) + 10
+    def _annotate(self, cap, scans) -> np.ndarray:
+        """Draw what perception concluded (not ground truth): per-bay status, blocked bays,
+        obstacles it found, plus the arm's own position (proprioception)."""
+        img = cap.rgb.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.rectangle(img, (0, 0), (img.shape[1], 30), (0, 0, 0), -1)
+        cv2.putText(img, f"rack R04 front camera | labels = on-robot perception "
+                         f"({scans[0].latency_ms:.0f} ms, no ground truth)",
+                    (8, 21), font, 0.6, (235, 235, 235), 1, cv2.LINE_AA)
+        for i, sc in enumerate(scans):
+            v = dc.server_view(sc)
+            led = "none" if self.bays[i].caddy == "removed" else v["led"]
+            col = LED_BGR.get(led, (255, 255, 255))
+            for b in sc.bays:
+                cv2.circle(img, (int(b.uv[0]), int(b.uv[1])), 7, LED_BGR.get(b.led, col), 1, cv2.LINE_AA)
+            u, vv, z = project(self.server_targets[i], cap.K, cap.T_base_cam)
+            if u is None:
+                continue
+            x, y = 8, int(vv) + 6
+            label = f"bay {i}: {led.upper()}" + ("  BLOCKED" if v["obstructed"] else "")
             if self.arm_at == str(i):
-                d.rectangle([x, y - 1, x + 40, y + 11], fill=(30, 80, 200))
-                d.text((x + 3, y), "<ARM", fill=(255, 255, 255))
-                x += 46
-            if self.obstacle_at == i:
-                d.rectangle([x, y - 1, x + 82, y + 11], fill=(250, 220, 0))
-                d.text((x + 3, y), "OBSTRUCTION", fill=(0, 0, 0))
-
-    def _project(self, p) -> tuple[float, float, float]:
-        """World point -> (u, v) pixel and depth for self.cam (free camera)."""
-        az, el = np.radians(self.cam.azimuth), np.radians(self.cam.elevation)
-        fwd = np.array([np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)])
-        pos = np.array(self.cam.lookat) - self.cam.distance * fwd
-        right = np.cross(fwd, [0, 0, 1.0]); right /= np.linalg.norm(right)
-        up = np.cross(right, fwd)
-        v = np.asarray(p) - pos
-        z = v @ fwd
-        h, w = self.renderer.height, self.renderer.width
-        f = (h / 2) / np.tan(np.radians(self.m.vis.global_.fovy) / 2)
-        return w / 2 + f * (v @ right) / z, h / 2 - f * (v @ up) / z, z
+                label += "  <ARM"
+            (tw, th), _ = cv2.getTextSize(label, font, 0.55, 1)
+            cv2.rectangle(img, (x - 4, y - th - 4), (x + tw + 4, y + 5), (0, 0, 0), -1)
+            cv2.putText(img, label, (x, y), font, 0.55, col, 1, cv2.LINE_AA)
+        for o in scans[0].obstacles:
+            x, y, w, h = o.bbox
+            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 40, 40), 2)
+            cv2.putText(img, f"OBSTRUCTION {o.clearance_m * 100:.0f} cm out", (x, max(44, y - 6)),
+                        font, 0.55, (255, 60, 60), 2, cv2.LINE_AA)
+        return img
 
     def perceive(self):
-        """Local perception on the MuJoCo render: LED = colour at each projected handle."""
-        from perception import BayView, read_thermal
-        img = Image.open(io.BytesIO(self.camera_png())).convert("RGB")
+        """On-robot perception of the camera render: LED colour per bay from the image, obstruction
+        from depth. The only non-camera input: a caddy the robot itself pulled reads 'none'."""
+        from perception import BayView, read_thermal   # this folder's helpers (BayView type, thermal)
+        self.camera_png()                              # also saves the annotated frame
+        _, scans = self._look()
+        self.last_scans = scans
         temps = read_thermal(self.thermal_png())
         views = []
-        for i in range(len(self.bays)):
-            votes: dict[str, int] = {}
-            for side in (-1, 1):
-                gid = self.m.geom(f"{self._ident(i)}_handle_{side}").id
-                u, v, z = self._project(self.d.geom_xpos[gid])
-                if z <= 0:
-                    continue
-                for du in range(-2, 3):
-                    for dv in range(-8, 9):   # handle is ~17 px tall; next server is 23 px away
-                        x, y = int(round(u)) + du, int(round(v)) + dv
-                        if 0 <= x < img.width and 0 <= y < img.height:
-                            c = _hue_class(img.getpixel((x, y)))
-                            if c:
-                                votes[c] = votes.get(c, 0) + 1
-            led = max(votes, key=votes.get) if votes else "off"
-            if self.bays[i].caddy == "removed":
-                led = "none"
-            views.append(BayView(i, led, temps[i], self.obstacle_at == i))
+        for i, sc in enumerate(scans):
+            v = dc.server_view(sc)
+            led = "none" if self.bays[i].caddy == "removed" else v["led"]
+            views.append(BayView(i, led, temps[i], v["obstructed"]))
         return views
 
     # thermal_png, telemetry, rack_summary: inherited (logical server state)
@@ -215,4 +229,4 @@ class MujocoRack(World):
         return super().wait()
 
     def close(self):
-        self.renderer.close()
+        self._cache = None

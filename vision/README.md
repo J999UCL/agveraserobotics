@@ -1,4 +1,6 @@
-# Perception: camera → which drive is faulty, where to grab it, what's in the way
+# vision: camera perception for the robot (which drive is faulty, where to grab it, what is in the way)
+
+The package is called `vision` rather than `perception` so it can sit next to the agent's `robot/sandbox/perception.py` without an import clash.
 
 Takes one wrist-camera frame (RGB + depth + intrinsics + camera pose) and returns:
 
@@ -15,7 +17,7 @@ It never uses ground truth for the fault: the faulty drive is found in the image
 ## With the team's MuJoCo scene (`sim/datacentre.xml`)
 
 ```python
-from perception import datacentre as dc
+from vision import datacentre as dc
 
 m, d = dc.load()                                   # adds per-drive status LEDs + a wrist camera
 dc.set_led(m, rack=2, slot=6, bay=5, colour="amber")
@@ -37,10 +39,10 @@ scan.summary()         # short text for logs / the reasoning agent
 ## Run
 
 ```powershell
-pip install -r perception/requirements.txt
-python -m pytest -q perception/tests        # 41 tests
-python -m perception.demo                   # fault + dropped-cable scans of the real scene -> out/
-python -m perception.check_frame frame.npz  # run on a frame saved from another simulator
+pip install -r vision/requirements.txt
+python -m pytest -q vision/tests        # 41 tests
+python -m vision.demo                   # fault + dropped-cable scans of the real scene -> out/
+python -m vision.check_frame frame.npz  # run on a frame saved from another simulator
 ```
 
 The tests check, against ground truth:
