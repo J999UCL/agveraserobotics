@@ -74,6 +74,8 @@ class SimServer:
         self._polling = True
         try:
             for key, _ in self.sel.select(timeout=0):
+                if key.data is not None and key.fileobj.fileno() == -1:
+                    continue  # closed by a nested poll while this event list was pending
                 if key.data is None:
                     conn, addr = self.lsock.accept()
                     conn.setblocking(False)
@@ -86,6 +88,8 @@ class SimServer:
             self._polling = False
 
     def _read(self, conn: socket.socket, data: dict) -> None:
+        if conn.fileno() == -1:
+            return
         try:
             chunk = conn.recv(1 << 16)
         except (BlockingIOError, InterruptedError):
@@ -93,8 +97,7 @@ class SimServer:
         except OSError:
             chunk = b""
         if not chunk:
-            self.sel.unregister(conn)
-            conn.close()
+            self._drop(conn)
             return
         data["buf"] += chunk
         while b"\n" in data["buf"]:
@@ -102,13 +105,23 @@ class SimServer:
             if line.strip():
                 self._handle(conn, line)
 
-    def _send(self, conn: socket.socket, msg: dict) -> None:
-        payload = (json.dumps(msg, default=_np) + "\n").encode()
-        conn.setblocking(True)
+    def _drop(self, conn: socket.socket) -> None:
         try:
+            self.sel.unregister(conn)
+        except (KeyError, ValueError):
+            pass
+        conn.close()
+
+    def _send(self, conn: socket.socket, msg: dict) -> None:
+        if conn.fileno() == -1:
+            return  # client went away while its command ran
+        payload = (json.dumps(msg, default=_np) + "\n").encode()
+        try:
+            conn.setblocking(True)
             conn.sendall(payload)
-        finally:
             conn.setblocking(False)
+        except OSError:
+            self._drop(conn)
 
     def _handle(self, conn: socket.socket, line: bytes) -> None:
         try:
