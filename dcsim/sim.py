@@ -25,7 +25,7 @@ import numpy as np
 from .build import DEPOT_SHELF_Z, LIDAR_RANGE, LIDAR_RAYS, Layout, build_model, rot_z
 from .config import SERVICE_STANDOFF, TRAY_ABOVE_BASE, SimCfg
 from .health import PartHealth, ServerHealth
-from .kinematics import ARM_DOF, IK, Q_NOMINAL, QUAT_DOWN_FINGERS_Y, yaw_rotate
+from .kinematics import ARM_DOF, IK, Q_NOMINAL, Q_STOW, QUAT_DOWN_FINGERS_Y, yaw_rotate
 
 GRIP_OPEN, GRIP_CLOSED = 255.0, 0.0
 MAX_JOINT_SPEED = 1.2  # rad/s cap on commanded arm joint motion
@@ -36,8 +36,15 @@ BUMPER_DIST = 0.12  # virtual bumper: emergency-stop event below this
 MAX_WAIT = 20.0  # give up on a blocked aisle after this long
 
 
+COLLISION_N = 15.0  # contact force with racks/depot/walls that counts as a collision (a normal shift has none)
+
+
 class Stopped(Exception):
     pass
+
+
+class Collision(Stopped):
+    """The robot hit the scenery hard enough to stop."""
 
 
 @dataclass
@@ -83,6 +90,8 @@ class DataCenterSim:
         self.step_hooks: list[Callable[[], None]] = []
         self.guard_reason: str | None = None
         self._stop = False
+        self.collision_watch = True
+        self.last_collision: dict | None = None
         self._viewer = None
         self._renderers: dict[tuple[int, int], mujoco.Renderer] = {}
         self._index()
@@ -126,6 +135,30 @@ class DataCenterSim:
         bid_of = {cid: m.body(cid).id for cid in self.layout.components}
         self.part_geoms = {cid: [g for g in range(m.ngeom) if m.geom_bodyid[g] == b and m.geom_contype[g] == 2]
                            for cid, b in bid_of.items()}
+        # collision watchdog: robot geoms vs fixed scenery (racks, depot, walls, room). Trays, parts and
+        # the floor are excluded: touching those is part of the job.
+        def root(b):
+            while m.body_parentid[b] != 0:
+                b = m.body_parentid[b]
+            return b
+        def under(b, top):
+            while b != 0:
+                if b == top:
+                    return True
+                b = m.body_parentid[b]
+            return False
+        robot_roots = {self.link0_body, m.body("chassis").id}
+        trays = [v["tray"] for v in self.srv.values()]
+        part_bodies = set(bid_of.values())
+        floor = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "floor")
+        self.geom_robot = np.zeros(m.ngeom, bool)
+        self.geom_scenery = np.zeros(m.ngeom, bool)
+        for g in range(m.ngeom):
+            b = m.geom_bodyid[g]
+            if root(b) in robot_roots:
+                self.geom_robot[g] = True
+            elif g != floor and b not in part_bodies and b != m.body("technician").id and not any(under(b, t) for t in trays):
+                self.geom_scenery[g] = True
         self.mat = {n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MATERIAL, f"led_{n}")
                     for n in ("ok", "fault", "identify", "off", "rebuild")}
 
@@ -133,6 +166,7 @@ class DataCenterSim:
         """Robot docked at the depot, all trays in, default faults (or a random set with `seed`).
         faults: list of (server_id, slot, fault), e.g. [("R1-05-U20", "A3", "dimm_uncorrectable")]."""
         m, d = self.m, self.d
+        self.last_collision = None
         mujoco.mj_resetData(m, d)
         self.q_cmd = Q_NOMINAL.copy()
         self.grip_cmd = GRIP_OPEN
@@ -235,6 +269,37 @@ class DataCenterSim:
             self._stop = False
             raise Stopped("stopped")
         self.step()
+        if self.collision_watch:
+            hit = self._scenery_contact()
+            if hit is not None:
+                self.last_collision = hit
+                self._log_event("collision", **hit)
+                self.nav_log.append({"event": "collision", **hit})
+                self.stop()
+                self._stop = False
+                raise Collision(f"collision: {hit['robot_part']} hit {hit['object']} ({hit['force_n']} N); "
+                                "motion stopped")
+
+    def _scenery_contact(self) -> dict | None:
+        """Strongest contact between the robot and fixed scenery above COLLISION_N, else None."""
+        n = self.d.ncon
+        if n == 0:
+            return None
+        g = self.d.contact.geom[:n]
+        rob, scen = self.geom_robot, self.geom_scenery
+        idx = np.nonzero((rob[g[:, 0]] & scen[g[:, 1]]) | (scen[g[:, 0]] & rob[g[:, 1]]))[0]
+        best, f6 = None, np.zeros(6)
+        for i in idx:
+            mujoco.mj_contactForce(self.m, self.d, int(i), f6)
+            if abs(f6[0]) > COLLISION_N and (best is None or abs(f6[0]) > best[0]):
+                best = (abs(f6[0]), int(i))
+        if best is None:
+            return None
+        g1, g2 = (int(x) for x in g[best[1]])
+        r, o = (g1, g2) if rob[g1] else (g2, g1)
+        name = lambda gid: (mujoco.mj_id2name(self.m, mujoco.mjtObj.mjOBJ_GEOM, gid)  # noqa: E731
+                            or mujoco.mj_id2name(self.m, mujoco.mjtObj.mjOBJ_BODY, self.m.geom_bodyid[gid]))
+        return {"t": round(self.time, 2), "robot_part": name(r), "object": name(o), "force_n": round(best[0], 1)}
 
     def stop(self) -> None:
         """Abort the running blocking motion and hold position."""
@@ -524,6 +589,14 @@ class DataCenterSim:
         if self.to_robot(p)[2] < 0.25:
             self.move_tcp(self.to_world(self.to_robot(p) * [1, 1, 0] + [0, 0, 0.30]), q)
         self.move_joints(Q_NOMINAL, duration=1.5)
+
+    def stow(self) -> None:
+        """Fold the arm over the base for driving (via the ready pose)."""
+        self.home()
+        self.move_joints(Q_STOW, duration=2.0)
+
+    def unstow(self) -> None:
+        self.move_joints(Q_NOMINAL, duration=2.0)
 
     # ================================================================ gripper
     def gripper_width(self) -> float:
@@ -935,7 +1008,7 @@ class DataCenterSim:
                 "heading_deg": round(float(np.degrees(_wrap(b[2]))), 1), "lift_m": round(b[3], 3)},
                 "at_server": self.active_server, "tcp_position": p.round(4).tolist(),
                 "joints": self.joint_positions().round(4).tolist(), "gripper_width": round(self.gripper_width(), 4),
-                "holding": self._held, "pull_force_n": round(self._last_force, 2),
+                "holding": self._held, "pull_force_n": round(self._last_force, 2), "last_collision": self.last_collision,
                 "onboard": self.storage("onboard"),
                 "trays": {sid: round(self.tray_extension(sid), 3) for sid in self.layout.servers}}
 

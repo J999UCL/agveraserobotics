@@ -63,11 +63,13 @@ class Skills:
             return self._result(False, error=f"tray of {out[0]} is still out; push it in first")
         try:
             t0 = s.time
-            s.home()
+            s.stow()
             route = s.route_to(s.service_pose(server))
             ok = s.drive_route(route)
-        except Stopped:
-            return self._result(False, error="stopped")
+            if ok:
+                s.unstow()
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         s.active_server = server if ok else None
         extra = {} if ok else {"error": "aisle blocked: obstacle did not clear, robot stopped and is waiting in the aisle"}
         return self._result(ok, server=server, drive_time_s=round(s.time - t0, 1), nav_events=list(s.nav_log), **extra)
@@ -82,10 +84,12 @@ class Skills:
             return self._result(False, error=f"tray of {out[0]} is still out; push it in first")
         try:
             t0 = s.time
-            s.home()
+            s.stow()
             ok = s.drive_route(s.route_to(s.dock_pose()))
-        except Stopped:
-            return self._result(False, error="stopped")
+            if ok:
+                s.unstow()
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         s.active_server = None
         extra = {} if ok else {"error": "aisle blocked: obstacle did not clear"}
         return self._result(ok, at="dock" if ok else "aisle", drive_time_s=round(s.time - t0, 1),
@@ -120,8 +124,8 @@ class Skills:
             h = self._grip_tab(sid)
             s.move_tcp(h - (s.cfg.tray.travel + 0.01) * self._heading()[:, 0], self._front(), speed=0.10, settle=0.5)
             self._let_go_of_tab()
-        except Stopped:
-            return self._result(False, error="stopped")
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         ext = s.tray_extension(sid)
         return self._result(ext > s.cfg.tray.travel - 0.02, server=sid, tray_extension_m=round(ext, 3))
 
@@ -139,8 +143,8 @@ class Skills:
             s.move_tcp(h + (s.tray_extension(sid) + 0.01) * self._heading()[:, 0], self._front(), speed=0.10, settle=0.5)
             self._let_go_of_tab()
             s.home()
-        except Stopped:
-            return self._result(False, error="stopped")
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         return self._result(s.tray_extension(sid) < 0.02, server=sid, tray_extension_m=round(s.tray_extension(sid), 3))
 
     def view_tray(self, height: float = 0.46) -> dict:
@@ -153,8 +157,8 @@ class Skills:
         p = s.tray_point(sid, [(t.fan_x + t.dimm_x) / 2 - 0.01, 0, 0])
         try:
             ok = self._transit(p, z_rel=height)
-        except Stopped:
-            return self._result(False, error="stopped")
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         return self._result(ok)
 
     # ------------------------------------------------------------ parts
@@ -203,8 +207,8 @@ class Skills:
                     s.health[sd.server].log("warning", f"{sd.name}: extraction aborted at {f:.1f} N (part stuck)", slot=sd.name)
                 return self._result(False, error="part stuck: extraction aborted to protect the socket",
                                     peak_force_n=round(peak, 1), slot=slot)
-        except Stopped:
-            return self._result(False, error="stopped")
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         return self._result(s.holding() == pid and s.parts[pid].where == "hand", part=pid, peak_force_n=round(peak, 1))
 
     def place(self, slot: str) -> dict:
@@ -232,8 +236,8 @@ class Skills:
             s.move_tcp(g + [0, 0, 0.001], down, speed=0.03, settle=0.3)
             s.open_gripper()
             s.move_tcp(g + [0, 0, 0.08], down, speed=0.15)
-        except Stopped:
-            return self._result(False, error="stopped")
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         p = s.parts[pid]
         return self._result(p.where == "slot" and p.slot == key, part=pid, slot=slot)
 
@@ -249,8 +253,8 @@ class Skills:
             s.open_gripper()
             for _ in range(40):
                 s.step()
-        except Stopped:
-            return self._result(False, error="stopped")
+        except Stopped as e:
+            return self._result(False, error=str(e) or "stopped")
         return self._result(s.parts[pid].where == "bin", part=pid)
 
     def find_spare(self, kind: str) -> str | None:

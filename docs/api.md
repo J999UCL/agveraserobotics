@@ -23,7 +23,7 @@ aborted to protect the socket"` or `"aisle blocked: obstacle did not clear"`.
 | `get_server_health(server)` | per DIMM (ECC counts, status), per fan (rpm, status), CPU temps, usable memory, tray position |
 | `get_event_log(server)` | that server's system event log |
 | `get_onboard_inventory()`, `get_depot_inventory()` | slot → part id |
-| `get_status()` | base x/y/heading/lift, current server, holding, pull force, onboard spares, tray extensions |
+| `get_status()` | base x/y/heading/lift, current server, holding, pull force, last collision, onboard spares, tray extensions |
 
 **Part status values:** `ok`, `degraded`, `failed`, `verifying` / `spinning up` (new part, ~3 s), `absent`.
 
@@ -33,7 +33,7 @@ aborted to protect the socket"` or `"aisle blocked: obstacle did not clear"`.
 
 | Call | Does |
 |---|---|
-| `go_to(server)` | stows the arm, drives down the aisle, faces the rack, lifts to the server's height |
+| `go_to(server)` | folds the arm over the base, drives down the aisle, faces the rack, lifts to the server's height, unfolds the arm |
 | `go_home()` | drives back to the dock at the spares depot |
 | `restock()` | at the dock, refills empty onboard spare slots from the depot shelf |
 
@@ -43,6 +43,11 @@ aborted to protect the socket"` or `"aisle blocked: obstacle did not clear"`.
 - **Give up:** after 20 s blocked, it gives up with an error.
 
 The result's `nav_events` lists the stops, resumes and give-ups.
+
+**Collision watchdog** (always on, during every motion): if any part of the robot presses on a rack,
+the depot or a wall with more than 15 N, the robot stops where it is and the call returns
+`"collision: <robot part> hit <object> (<force> N); motion stopped"`. `get_status()["last_collision"]`
+keeps the details. Touching trays and parts is part of the job and doesn't count.
 
 ## Server work (at the current server)
 

@@ -13,6 +13,9 @@ ARM_JOINTS = [f"joint{i}" for i in range(1, 8)]
 ARM_DOF = 7
 # Nominal posture the solver drifts toward in the null space (elbow up, wrist down).
 Q_NOMINAL = np.array([0.0, 0.1, 0.0, -2.2, 0.0, 2.3, 0.785])
+# folded for driving: the whole arm stays within 0.20 m ahead of the base and >= 0.22 m above the deck,
+# so it clears shelves, rack fronts and the depot while the lift moves (the ready pose reaches 0.60 m)
+Q_STOW = np.array([0.0, -1.56, 0.0, -3.0, 0.0, 1.25, 0.785])
 
 # Orientations below are in the ROBOT frame (robot facing +X). Rotate by the base yaw to use them.
 # Gripper pointing straight down, fingers closing along robot Y (RAM, fan tabs).

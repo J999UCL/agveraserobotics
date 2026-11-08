@@ -134,8 +134,8 @@ class SimServer:
         was, self._polling = self._polling, False  # keep receiving (e.g. stop) while this runs
         try:
             result, error = fn(**args), None
-        except Stopped:
-            result, error = {"ok": False, "error": "stopped"}, None
+        except Stopped as e:
+            result, error = {"ok": False, "error": str(e) or "stopped"}, None
         except Exception as e:
             result, error = None, f"{type(e).__name__}: {e}"
             traceback.print_exc()
