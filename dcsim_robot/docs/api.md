@@ -73,7 +73,7 @@ keeps the details. Touching trays and parts is part of the job and doesn't count
 | `get_lidar_scan()` | 37 ranges from −90° to +90° (0 = ahead); `None` = nothing within 4 m |
 | `get_pull_force()` | current and peak extraction force (N) |
 
-**Faulty parts have amber LEDs.** A DIMM's LED is on the board behind its slot; a fan's LED is on top of the module.
+**Healthy parts have green LEDs and faulty parts amber.** An empty slot's LED is off, and a new part shows lime for about 3 s while it verifies. A DIMM's LED is on the board behind its slot; a fan's LED is on top of the module.
 
 ## Demo controls
 
