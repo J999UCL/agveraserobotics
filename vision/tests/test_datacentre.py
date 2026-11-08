@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from perception import datacentre as dc
+from vision import datacentre as dc
 
 pytestmark = pytest.mark.skipif(not dc.SIM_XML.exists(), reason="sim/datacentre.xml not found")
 
