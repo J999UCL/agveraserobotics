@@ -9,3 +9,8 @@ __pycache__/
 
 # agent run outputs (traces, frames): kept local, regenerate with the runners
 robot/sandbox/runs/
+
+# perception outputs and generated textures
+out/
+perception/_assets/
+.pytest_cache/
